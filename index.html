@@ -8,35 +8,40 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <style>
-  :root { --bg:#fff; --fg:#111; --muted:#7a7a7a; --ok:#1a9c4e; --bad:#d23; --wait:#e79a12; --line:#e6e6e6; --card:#f6f7f8; --accent:#2787f5; }
-  @media (prefers-color-scheme: dark){ :root{ --bg:#111418; --fg:#eaeaea; --muted:#8a9099; --card:#1b1f25; --line:#2a2f36; } }
+  /* Оформление в духе Telegram — сгруппированные списки. Палитра берётся
+     из темы площадки (см. applyTheme), значения ниже — запасные. */
+  :root { --bg:#efeff4; --card:#fff; --fg:#111; --muted:#7a7a7a; --hint:#8a8a8e;
+          --accent:#2787f5; --ok:#1a9c4e; --bad:#d23; --wait:#e79a12; --line:#e3e3e7; --radius:12px; }
+  @media (prefers-color-scheme: dark){ :root{ --bg:#17212b; --card:#232e3c; --fg:#f5f5f5;
+          --muted:#8a9099; --hint:#7d8b99; --line:#2b3947; } }
   * { box-sizing:border-box }
   html, body { max-width:100%; overflow-x:hidden }   /* никакой горизонтальной прокрутки */
   body { margin:0; font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); padding:16px }
   .label b, .label span { overflow-wrap:anywhere }   /* длинные названия каналов не распирают строку */
-  h1 { font-size:18px; margin:0 0 4px }
-  h2 { font-size:16px; margin:0 0 10px }
-  p.sub { color:var(--muted); margin:0 0 16px; font-size:14px }
-  .group-title { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px }
+  h1 { font-size:20px; margin:0 0 4px; font-weight:600 }
+  h2 { font-size:17px; margin:0 0 10px; font-weight:600 }
+  p.sub { color:var(--hint); margin:0 0 18px; font-size:14px }
+  .group-title { font-size:13px; color:var(--hint); margin:20px 4px 7px; text-transform:uppercase; letter-spacing:.02em }
 
-  .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px }
-  .icon { width:26px; height:26px; border-radius:50%; flex:0 0 26px; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--line); color:var(--muted) }
+  /* Сгруппированный список: карточка, внутри строки с тонкими разделителями,
+     отступ разделителя слева — как в настройках Telegram. */
+  .group { background:var(--card); border-radius:var(--radius); overflow:hidden; margin-bottom:8px }
+  .row { display:flex; align-items:center; gap:12px; padding:12px 14px; position:relative }
+  .row + .row::before { content:''; position:absolute; left:14px; right:0; top:0; height:1px; background:var(--line) }
+  .row.act + .row.act::before { left:14px }
+  .icon { width:24px; height:24px; border-radius:50%; flex:0 0 24px; display:flex; align-items:center;
+    justify-content:center; font-size:14px; background:var(--line); color:var(--muted) }
   .icon.ok{background:var(--ok);color:#fff} .icon.bad{background:var(--bad);color:#fff}
   .icon.wait{background:var(--wait);color:#fff} .icon.pend{background:var(--accent);color:#fff}
-  .label { flex:1; min-width:0 } .label b { display:block } .label span { color:var(--muted); font-size:13px }
+  .label { flex:1; min-width:0 } .label b { display:block; font-weight:400 }
+  .label span { color:var(--hint); font-size:13px; display:block; margin-top:2px }
 
-  .todo { background:var(--card); border-radius:12px; margin-bottom:10px; padding:14px 14px 12px }
-  .todo .head { display:flex; align-items:center; gap:12px; margin-bottom:12px }
-  /* Окно мини-приложения бывает очень узким (десктопный Telegram) —
-     кнопки должны переноситься, а не уезжать за край. */
-  .todo .acts { display:flex; gap:8px; flex-wrap:wrap }
-  .btn-go, .btn-copy { display:block; padding:11px 12px; border-radius:10px; font-size:14px;
-    font-weight:600; text-align:center; text-decoration:none; border:0; cursor:pointer;
-    font-family:inherit; min-width:0 }
-  .btn-go { background:var(--accent); color:#fff; flex:1 1 150px }
-  .btn-copy { background:transparent; color:var(--accent); border:1px solid var(--accent); flex:1 1 110px }
-  .btn-copy.done { color:var(--ok); border-color:var(--ok) }
-  .manual { margin-top:10px; font-size:12px; color:var(--muted) }
+  /* Действие — строка с акцентным текстом, а не отдельная кнопка. */
+  .row.act { color:var(--accent); cursor:pointer; text-decoration:none; font-size:15px }
+  .row.act:active { background:rgba(127,127,127,.10) }
+  .row.act .chev { color:var(--hint); font-size:17px; margin-left:auto; flex:0 0 auto }
+  .row.act.done { color:var(--ok) }
+  .manual { padding:10px 14px 12px; font-size:12px; color:var(--hint); background:var(--card) }
   .manual input { width:100%; margin-top:6px; padding:9px 10px; border:1px solid var(--line);
     border-radius:8px; background:var(--bg); color:var(--fg); font-size:12px; font-family:inherit }
 
@@ -140,11 +145,28 @@ var P = (function(){
   var mx = window.WebApp && window.WebApp.initDataUnsafe;   // MAX внедряет сам
   var vk = window.vkBridge;
 
+  /** Цвета берём из темы хоста, чтобы приложение не спорило с оформлением. */
+  function applyTheme(p){
+    if(!p) return;
+    var map = { bg_color:'--bg', secondary_bg_color:'--bg', section_bg_color:'--card',
+      text_color:'--fg', hint_color:'--hint', subtitle_text_color:'--muted',
+      link_color:'--accent', button_color:'--accent', section_separator_color:'--line' };
+    var r = document.documentElement.style;
+    // secondary_bg — фон экрана, section_bg — фон карточек; если второго нет,
+    // карточку делаем из bg_color, иначе всё сольётся в одно пятно.
+    if(p.secondary_bg_color) r.setProperty('--bg', p.secondary_bg_color);
+    if(p.section_bg_color || p.bg_color) r.setProperty('--card', p.section_bg_color || p.bg_color);
+    Object.keys(map).forEach(function(k){
+      if(k==='bg_color'||k==='secondary_bg_color'||k==='section_bg_color') return;
+      if(p[k]) r.setProperty(map[k], p[k]);
+    });
+  }
+
   if (tg) {
     var W = window.Telegram.WebApp;
     return {
       name: 'tg', title: 'Telegram',
-      async init(){ try{ W.ready(); W.expand() }catch(e){} },
+      async init(){ try{ W.ready(); W.expand(); applyTheme(W.themeParams) }catch(e){} },
       async userId(){ return W.initDataUnsafe.user.id },
       canCheckVk: false,
       async copy(text){ try{ await navigator.clipboard.writeText(text); return true }catch(e){ return false } },
@@ -203,72 +225,70 @@ function renderChecks(detail){
     if(!list.length) return;
     var d = (detail && detail[b]) || null;
     var cap = BUCKET_TITLE[b];
-    if(d && d.need) cap += ' — нужно ' + d.need + ' из ' + d.total + ', подтверждено ' + d.have;
+    if(d && d.need) cap += ' · ' + d.have + ' из ' + d.need;
     html += '<div class="group-title">'+esc(cap)+'</div>';
-    list.forEach(function(c){ html += checkRow(c, b) });
+    // Одна карточка на площадку: ссылка для подтверждения у всех её каналов
+    // общая, поэтому блок действий показываем один раз, а не у каждой строки.
+    html += '<div class="group">' +
+      list.map(function(c){ return checkRow(c, b) }).join('') +
+      bucketActions(b, list) + '</div>';
   });
   $('checks').innerHTML = html || '<div class="empty">Проверки не настроены</div>';
-  Array.prototype.forEach.call($('checks').querySelectorAll('.btn-copy'), function(btn){
-    btn.onclick = function(){ copyText(btn.dataset.copy, btn) };
+  Array.prototype.forEach.call($('checks').querySelectorAll('[data-copy]'), function(el){
+    el.onclick = function(){ copyText(el.dataset.copy, el) };
   });
+}
+
+function statusRow(c, icon, cls, note){
+  return '<div class="row"><div class="icon '+cls+'">'+icon+'</div>'+
+    '<div class="label"><b>'+esc(c.title)+'</b><span>'+esc(note)+'</span></div></div>';
+}
+function actionRow(label, href, copyUrl){
+  var chev = '<span class="chev">›</span>';
+  if(href) return '<a class="row act" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+chev+'</a>';
+  return '<div class="row act" data-copy="'+esc(copyUrl)+'">'+esc(label)+'</div>';
 }
 
 function checkRow(c, b){
-  var ok = !!confirmed[c.id];
-  if(ok){
-    return '<div class="check"><div class="icon ok">✓</div>'+
-      '<div class="label"><b>'+esc(c.title)+'</b><span>подтверждено</span></div></div>';
-  }
-  // ВК проверяется токеном пользователя ВК. На других площадках его нет,
-  // поэтому ведём человека в мини-приложение ВКонтакте.
-  if(b==='vk' && !P.canCheckVk){
-    var vkApp = cfg.vkAppUrl;
-    return '<div class="todo">'+
-      '<div class="head"><div class="icon">·</div>'+
-      '<div class="label"><b>'+esc(c.title)+'</b><span>подтверждается в приложении ВКонтакте</span></div></div>'+
-      (vkApp ? '<div class="acts">'+
-        '<a class="btn-go" href="'+esc(vkApp)+'" target="_blank" rel="noopener noreferrer">Открыть во ВКонтакте</a>'+
-        '<button class="btn-copy" data-copy="'+esc(vkApp)+'">Копировать</button></div>'+
-        '<div class="manual">Не открывается? Скопируйте ссылку:'+
-        '<input type="text" readonly value="'+esc(vkApp)+'" onclick="this.select()"></div>' : '')+
-      '</div>';
-  }
+  if(confirmed[c.id]) return statusRow(c, '✓', 'ok', 'подтверждено');
   if(b==='vk'){
-    return '<div class="check"><div class="icon '+(c.required?'bad':'wait')+'">'+(c.required?'✗':'⏳')+'</div>'+
-      '<div class="label"><b>'+esc(c.title)+'</b><span>'+
-      (c.required?'подписка не найдена':'сверим при подведении итогов')+'</span></div></div>';
+    // ВК проверяется токеном пользователя ВК; вне ВК его нет.
+    if(!P.canCheckVk) return statusRow(c, '·', '', 'подтверждается в приложении ВКонтакте');
+    return statusRow(c, c.required?'✗':'⏳', c.required?'bad':'wait',
+      c.required ? 'подписка не найдена' : 'сверим при подведении итогов');
   }
-  // Своя площадка уже подтверждена ботом — значит человек в ней и есть.
-  if(b===P.name){
-    return '<div class="check"><div class="icon">·</div>'+
-      '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и вернитесь сюда</span></div></div>';
-  }
-  var raw = b==='max' ? links.maxUrl : links.tgUrl;
-  var href = raw;
-  if(b==='tg' && raw){
+  if(b===P.name) return statusRow(c, '·', '', 'подпишитесь и вернитесь сюда');
+  return statusRow(c, '·', '', 'подпишитесь и нажмите «Старт» у бота');
+}
+
+/** Действия площадки — одним блоком внизу её карточки. */
+function bucketActions(b, list){
+  var allDone = list.every(function(c){ return confirmed[c.id] });
+  if(allDone) return '';
+  if(b === P.name) return '';                      // человек уже здесь
+  var raw = b==='vk' ? cfg.vkAppUrl : b==='max' ? links.maxUrl : links.tgUrl;
+  if(!raw) return '';
+  var href = raw, label;
+  if(b==='vk') label = 'Открыть во ВКонтакте';
+  else if(b==='max') label = 'Перейти в MAX';
+  else {
+    label = 'Перейти в Telegram';
     var m = raw.match(/t\.me\/([^?]+)\?start=(.+)$/);
     if(m) href = 'tg://resolve?domain='+m[1]+'&start='+m[2];
   }
-  return '<div class="todo">'+
-    '<div class="head"><div class="icon">·</div>'+
-    '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и нажмите «Старт» у бота</span></div></div>'+
-    '<div class="acts">'+
-      (href ? '<a class="btn-go" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Перейти и подтвердить</a>' : '')+
-      (raw ? '<button class="btn-copy" data-copy="'+esc(raw)+'">Копировать</button>' : '')+
-    '</div>'+
-    (raw ? '<div class="manual">Не открывается? Скопируйте ссылку и откройте вручную:'+
-           '<input type="text" readonly value="'+esc(raw)+'" onclick="this.select()"></div>' : '')+
-    '</div>';
+  return actionRow(label, href) + actionRow('Скопировать ссылку', null, raw) +
+    '<div class="manual">Ссылка, если не открылась:'+
+    '<input type="text" readonly value="'+esc(raw)+'" onclick="this.select()"></div>';
 }
 
-async function copyText(text, btn){
+async function copyText(text, el){
   var done = await P.copy(text);
   if(done){
-    var was = btn.textContent;
-    btn.textContent = 'Скопировано'; btn.classList.add('done');
-    setTimeout(function(){ btn.textContent = was; btn.classList.remove('done') }, 1800);
+    var was = el.textContent;
+    el.textContent = 'Скопировано'; el.classList.add('done');
+    setTimeout(function(){ el.textContent = was; el.classList.remove('done') }, 1800);
   } else {
-    var input = btn.closest('.todo').querySelector('.manual input');
+    var input = el.parentNode.querySelector('.manual input');
     if(input){ input.focus(); input.select() }
   }
 }
