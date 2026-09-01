@@ -46,7 +46,7 @@
   <div class="label"><b>Канал в MAX</b><span>загрузка…</span></div>
   <div class="arrow" id="max-arrow" style="display:none">→</div>
 </a>
-<a class="check" id="c-tg" target="_blank" rel="noopener">
+<a class="check" id="c-tg" rel="noreferrer">
   <div class="icon">·</div>
   <div class="label"><b>Канал в Telegram</b><span>загрузка…</span></div>
   <div class="arrow" id="tg-arrow" style="display:none">→</div>
@@ -111,7 +111,15 @@ async function run(){
       body:JSON.stringify({vkUserId:uid, vkGutenev:gut, vkSoyuzmash:soyuz})});
     var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
     if(sess.maxUrl){ var am=document.getElementById('c-max'); am.href=sess.maxUrl; am.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('max-arrow').style.display='block'; }
-    if(sess.tgUrl){ var at=document.getElementById('c-tg'); at.href=sess.tgUrl; at.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('tg-arrow').style.display='block'; }
+    if(sess.tgUrl){
+      // https://t.me/<bot>?start=<payload> → tg://resolve?domain=<bot>&start=<payload>
+      // Нативная схема надёжнее внутри webview ВК: универсальная https-ссылка
+      // иногда просто выводит Telegram на передний план без передачи start.
+      var m = sess.tgUrl.match(/t\.me\/([^?]+)\?start=(.+)$/);
+      var at=document.getElementById('c-tg');
+      at.href = m ? ('tg://resolve?domain='+m[1]+'&start='+m[2]) : sess.tgUrl;
+      at.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('tg-arrow').style.display='block';
+    }
     else { document.getElementById('c-tg').querySelector('span').textContent='скоро'; }
     poll();
   }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))); }
