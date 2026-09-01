@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Цех историй — проверка подписки</title>
+<title>Цех историй</title>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <style>
   :root { --bg:#fff; --fg:#111; --muted:#7a7a7a; --ok:#1a9c4e; --bad:#d23; --wait:#e79a12; --line:#e6e6e6; --card:#f6f7f8; --accent:#2787f5; }
@@ -11,138 +11,398 @@
   * { box-sizing:border-box }
   body { margin:0; font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); padding:16px }
   h1 { font-size:18px; margin:0 0 4px }
-  p.sub { color:var(--muted); margin:0 0 16px }
+  h2 { font-size:16px; margin:0 0 10px }
+  p.sub { color:var(--muted); margin:0 0 16px; font-size:14px }
   .group-title { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px }
+
   .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px; text-decoration:none; color:inherit }
   a.check:active { opacity:.7 }
   .icon { width:26px; height:26px; border-radius:50%; flex:0 0 26px; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--line); color:var(--muted) }
-  .icon.ok { background:var(--ok); color:#fff }
-  .icon.bad { background:var(--bad); color:#fff }
-  .icon.wait { background:var(--wait); color:#fff }
-  .icon.pend { background:var(--accent); color:#fff }
-  .label { flex:1 }
-  .label b { display:block }
-  .label span { color:var(--muted); font-size:13px }
-  .arrow { color:var(--accent); font-size:20px }
+  .icon.ok{background:var(--ok);color:#fff} .icon.bad{background:var(--bad);color:#fff}
+  .icon.wait{background:var(--wait);color:#fff} .icon.pend{background:var(--accent);color:#fff}
+  .label { flex:1 } .label b { display:block } .label span { color:var(--muted); font-size:13px }
+  /* Проверка, которую ещё надо пройти: карточка с явными действиями,
+     а не строка со стрелкой — стрелку не читают как кнопку. */
+  .todo { background:var(--card); border-radius:12px; margin-bottom:10px; padding:14px 14px 12px }
+  .todo .head { display:flex; align-items:center; gap:12px; margin-bottom:12px }
+  .todo .acts { display:flex; gap:8px }
+  .btn-go, .btn-copy { flex:1; display:block; padding:11px 12px; border-radius:10px; font-size:14px;
+    font-weight:600; text-align:center; text-decoration:none; border:0; cursor:pointer; font-family:inherit }
+  .btn-go { background:var(--accent); color:#fff }
+  .btn-copy { background:transparent; color:var(--accent); border:1px solid var(--accent); flex:0 0 auto; padding:11px 14px }
+  .btn-copy.done { color:var(--ok); border-color:var(--ok) }
+  .manual { margin-top:10px; font-size:12px; color:var(--muted) }
+  .manual input { width:100%; margin-top:6px; padding:9px 10px; border:1px solid var(--line);
+    border-radius:8px; background:var(--bg); color:var(--fg); font-size:12px; font-family:inherit }
   .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:14px }
+
+  button, .btn { display:block; width:100%; padding:14px; border:0; border-radius:12px; background:var(--accent); color:#fff;
+    font-size:15px; font-weight:600; margin-top:10px; text-align:center; text-decoration:none; cursor:pointer; font-family:inherit }
+  button:active,.btn:active{opacity:.85}
+  button[disabled]{opacity:.45}
+  .btn-sec { background:var(--card); color:var(--fg); border:1px solid var(--line) }
+  .back { background:none; border:0; color:var(--accent); font-size:15px; padding:0 0 12px; width:auto; margin:0; text-align:left; font-weight:400 }
+
+  .chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:6px; -webkit-overflow-scrolling:touch }
+  .chip { flex:0 0 auto; padding:8px 14px; border-radius:999px; background:var(--card); border:1px solid var(--line);
+    font-size:13px; white-space:nowrap; cursor:pointer }
+  .chip.on { background:var(--accent); color:#fff; border-color:var(--accent) }
+
+  .work { display:flex; gap:12px; padding:12px; background:var(--card); border-radius:12px; margin-bottom:10px; cursor:pointer }
+  .work:active{opacity:.8}
+  .work .thumb { width:64px; height:64px; flex:0 0 64px; border-radius:9px; background:var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--muted) }
+  .work .meta { flex:1; min-width:0 }
+  .work .meta b { display:block; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .work .meta span { color:var(--muted); font-size:13px }
+
+  .nom-row { display:flex; align-items:center; gap:10px; margin:9px 0; font-size:14px }
+  .nom-row .n { flex:1 } .nom-row .c { color:var(--muted); font-size:13px; white-space:nowrap }
+  .bar { height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:4px }
+  .bar i { display:block; height:100%; background:var(--accent) }
+  .bar.full i { background:var(--ok) }
+
+  label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px }
+  input[type=text], textarea, select { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px;
+    background:var(--bg); color:var(--fg); font-size:15px; font-family:inherit }
+  textarea { min-height:80px; resize:vertical }
+  .err { background:rgba(221,51,51,.12); color:var(--bad); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
+  .okmsg { background:rgba(26,156,78,.12); color:var(--ok); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
+  .player { width:100%; aspect-ratio:16/9; border:0; border-radius:12px; background:#000; margin-bottom:12px }
+  .empty { color:var(--muted); text-align:center; padding:28px 0; font-size:14px }
   #log { margin-top:14px; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; opacity:.7 }
-  #done { display:none; text-align:center; padding:14px; background:var(--ok); color:#fff; border-radius:12px; font-weight:600; margin-top:14px }
-  #participate { display:none; width:100%; margin-top:10px; padding:16px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-size:16px; font-weight:600; }
-  #participate:active { opacity:.85 }
+  .hide { display:none }
 </style>
 </head>
 <body>
-<h1>Цех историй</h1>
-<p class="sub">Подтвердите подписки, чтобы участвовать в голосовании.</p>
 
-<div class="group-title">Обязательно для участия</div>
+<!-- ЭКРАН 1 · проверки -->
+<div id="v-checks">
+  <h1>Цех историй</h1>
+  <p class="sub">Подтвердите подписки, чтобы участвовать в голосовании.</p>
 
-<div class="check" id="c-soyuzmash">
-  <div class="icon pend">…</div>
-  <div class="label"><b>Сообщество СоюзМаш</b><span>ВКонтакте</span></div>
-</div>
-<a class="check" id="c-max" target="_blank" rel="noopener">
-  <div class="icon">·</div>
-  <div class="label"><b>Канал в MAX</b><span>загрузка…</span></div>
-  <div class="arrow" id="max-arrow" style="display:none">→</div>
-</a>
-<a class="check" id="c-tg" target="_blank" rel="noopener noreferrer">
-  <div class="icon">·</div>
-  <div class="label"><b>Канал в Telegram</b><span>загрузка…</span></div>
-  <div class="arrow" id="tg-arrow" style="display:none">→</div>
-</a>
+  <div id="checks"></div>
+  <div class="note hide" id="vk-note">
+    Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
+    сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
+  </div>
 
-<div class="group-title">Проверяется отдельно</div>
-
-<div class="check" id="c-gutenev">
-  <div class="icon pend">…</div>
-  <div class="label"><b>Личная страница Гутенева</b><span>ВКонтакте</span></div>
+  <button id="to-catalog" class="btn-sec">Смотреть работы</button>
+  <button id="to-submit" class="hide">Подать свою работу</button>
+  <div id="log"></div>
 </div>
 
-<div class="note" id="gutenev-note" style="display:none">
-  Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
-  сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
+<!-- ЭКРАН 2 · каталог -->
+<div id="v-catalog" class="hide">
+  <button class="back" data-to="checks">← Назад</button>
+  <h1>Работы конкурса</h1>
+  <p class="sub" id="cat-count">Загрузка…</p>
+  <div class="chips" id="chips"></div>
+  <div id="works"></div>
+  <button id="more" class="btn-sec hide">Показать ещё</button>
 </div>
 
-<div id="done">✓ Все условия выполнены</div>
-<button id="participate">Перейти к участию →</button>
-<div id="log"></div>
+<!-- ЭКРАН 3 · карточка работы -->
+<div id="v-work" class="hide">
+  <button class="back" data-to="catalog">← К списку</button>
+  <div id="work-body"></div>
+</div>
+
+<!-- ЭКРАН 4 · подача работы -->
+<div id="v-submit" class="hide">
+  <button class="back" data-to="checks">← Назад</button>
+  <h1>Подать работу</h1>
+  <p class="sub">Видео должно быть загружено во ВКонтакте — укажите ссылку на него.</p>
+
+  <div class="group-title">Свободные места</div>
+  <div id="nom-progress"></div>
+
+  <label for="f-nom">Номинация</label>
+  <select id="f-nom"></select>
+  <label for="f-title">Название работы</label>
+  <input type="text" id="f-title" maxlength="200" placeholder="Например: Первый день на заводе">
+  <label for="f-url">Ссылка на видео ВКонтакте</label>
+  <input type="text" id="f-url" placeholder="https://vk.com/video-123456_789012">
+  <label for="f-desc">Описание (необязательно)</label>
+  <textarea id="f-desc" maxlength="2000" placeholder="Пара слов о вашей истории"></textarea>
+
+  <button id="do-submit">Отправить работу</button>
+  <div id="submit-msg"></div>
+</div>
 
 <script>
-var GUTENEV = 708816212, SOYUZMASH = 57715265, APP_ID = 54748142, API_V = '5.199';
-var BACKEND = 'https://ef-server.tailfacff5.ts.net';   // временный публичный адрес (Tailscale Funnel)
+var API_V = '5.199';
+var BACKEND = 'https://ef-server.tailfacff5.ts.net';
 
 var bridge = window.vkBridge;
-var sid = null, pollTimer = null;
-var state = { soyuzmash:false, max:false, tg:false };
-function log(m){ var el=document.getElementById('log'); el.textContent += m + '\n'; }
-function setIcon(id, s, note){ var c=document.getElementById(id), i=c.querySelector('.icon');
-  i.className='icon '+s; i.textContent = s==='ok'?'✓':s==='bad'?'✗':s==='wait'?'⏳':'…'; if(note) c.querySelector('span').textContent=note; }
-function checkDone(){
-  if(state.soyuzmash && state.max && state.tg){
-    document.getElementById('done').style.display='block';
-    document.getElementById('participate').style.display='block';
+var uid = null, sid = null;
+var cfg = null;                 // конфиг с сервера: правила и каналы
+var confirmed = {};             // id канала → подтверждён
+var noms = [], curNom = '', page = 1, loading = false;
+
+var $ = function(id){ return document.getElementById(id) };
+function log(m){ $('log').textContent += m + '\n' }
+function show(el, yes){ el.classList.toggle('hide', !yes) }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c] }) }
+
+function showView(name){
+  ['checks','catalog','work','submit'].forEach(function(v){ show($('v-'+v), v===name) });
+  window.scrollTo(0,0);
+}
+Array.prototype.forEach.call(document.querySelectorAll('.back'), function(b){
+  b.onclick = function(){ showView(b.dataset.to) };
+});
+
+/* ---------- экран проверок ---------- */
+var BUCKET_TITLE = { vk:'ВКонтакте', max:'MAX', tg:'Telegram' };
+function bucketOf(p){ return p==='max' ? 'max' : p==='tg' ? 'tg' : 'vk' }
+
+/** Экран собирается из каналов, заданных в админке, а не из зашитого списка. */
+function renderChecks(detail, links){
+  var order = ['vk','max','tg'], html = '';
+  order.forEach(function(b){
+    var list = cfg.channels.filter(function(c){ return bucketOf(c.platform)===b });
+    if(!list.length) return;
+    var d = (detail && detail[b]) || null;
+    var cap = BUCKET_TITLE[b];
+    if(d && d.need) cap += ' — нужно ' + d.need + ' из ' + d.total + ', подтверждено ' + d.have;
+    html += '<div class="group-title">'+esc(cap)+'</div>';
+    list.forEach(function(c){
+      var ok = !!confirmed[c.id];
+      var raw = b==='max' ? links.maxUrl : b==='tg' ? links.tgUrl : null;
+      // Для перехода — нативная схема tg:// (надёжнее в webview ВК),
+      // для копирования — обычная https-ссылка, её можно вставить куда угодно.
+      var href = raw;
+      if(b==='tg' && raw){
+        var m = raw.match(/t\.me\/([^?]+)\?start=(.+)$/);
+        if(m) href = 'tg://resolve?domain='+m[1]+'&start='+m[2];
+      }
+
+      if(ok || b==='vk'){
+        var note = ok ? 'подтверждено'
+          : (c.required ? 'подписка не найдена' : 'сверим при подведении итогов');
+        html += '<div class="check">'+
+          '<div class="icon '+(ok?'ok':(c.required?'bad':'wait'))+'">'+(ok?'✓':(c.required?'✗':'⏳'))+'</div>'+
+          '<div class="label"><b>'+esc(c.title)+'</b><span>'+esc(note)+'</span></div></div>';
+        return;
+      }
+      // MAX / Telegram: явные кнопки вместо стрелки.
+      html += '<div class="todo">'+
+        '<div class="head"><div class="icon">·</div>'+
+        '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и нажмите «Старт» у бота</span></div></div>'+
+        '<div class="acts">'+
+          (href ? '<a class="btn-go" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Перейти и подтвердить</a>' : '')+
+          (raw ? '<button class="btn-copy" data-copy="'+esc(raw)+'">Копировать</button>' : '')+
+        '</div>'+
+        (raw ? '<div class="manual">Не открывается? Скопируйте ссылку и откройте вручную:'+
+               '<input type="text" readonly value="'+esc(raw)+'" onclick="this.select()"></div>' : '')+
+        '</div>';
+    });
+  });
+  $('checks').innerHTML = html || '<div class="empty">Проверки не настроены</div>';
+  Array.prototype.forEach.call($('checks').querySelectorAll('.btn-copy'), function(btn){
+    btn.onclick = function(){ copyText(btn.dataset.copy, btn) };
+  });
+}
+
+/** Копирование: сначала штатный способ ВК, потом буфер браузера,
+ *  в крайнем случае — выделяем поле, чтобы человек скопировал сам. */
+async function copyText(text, btn){
+  var done = false;
+  try{ await bridge.send('VKWebAppCopyText', { text: text }); done = true }catch(e){}
+  if(!done){ try{ await navigator.clipboard.writeText(text); done = true }catch(e){} }
+  if(done){
+    var was = btn.textContent;
+    btn.textContent = 'Скопировано'; btn.classList.add('done');
+    setTimeout(function(){ btn.textContent = was; btn.classList.remove('done') }, 1800);
+  } else {
+    var input = btn.closest('.todo').querySelector('.manual input');
+    if(input){ input.focus(); input.select() }
   }
 }
 
+/** Проверки ВК делаются на устройстве голосующего — сервер его токена не имеет. */
+async function checkVkChannels(access){
+  var passed = [], softMissing = false;
+  var groups = cfg.channels.filter(function(c){ return c.platform==='vk_group' });
+  var pages  = cfg.channels.filter(function(c){ return c.platform==='vk_user' });
+
+  for(var i=0;i<groups.length;i++){
+    var c = groups[i];
+    try{
+      var mem = await bridge.send('VKWebAppCallAPIMethod',{method:'groups.isMember',
+        params:{group_id:c.ref, user_id:uid, access_token:access, v:API_V}});
+      if(mem.response===1||mem.response===true){ passed.push(c.id); confirmed[c.id]=true }
+    }catch(e){ log('isMember '+c.ref+': ошибка') }
+  }
+  if(pages.length){
+    try{
+      var subs = await bridge.send('VKWebAppCallAPIMethod',{method:'users.getSubscriptions',
+        params:{user_id:uid, count:200, access_token:access, v:API_V}});
+      var users=(subs.response&&subs.response.users&&subs.response.users.items)||[];
+      pages.forEach(function(c){
+        if(users.indexOf(Number(c.ref))>=0){ passed.push(c.id); confirmed[c.id]=true }
+        else if(!c.required) softMissing = true;
+      });
+    }catch(e){ pages.forEach(function(c){ if(!c.required) softMissing = true }) }
+  }
+  show($('vk-note'), softMissing);
+  return passed;
+}
+
+var links = { maxUrl:null, tgUrl:null };
+
 async function run(){
-  setIcon('c-soyuzmash','pend'); setIcon('c-gutenev','pend');
   try{
+    cfg = await (await fetch(BACKEND+'/api/config')).json();
+    document.title = cfg.title;
+    $('v-checks').querySelector('h1').textContent = cfg.title;
+    $('v-checks').querySelector('.sub').textContent = cfg.subtitle;
+    renderChecks(null, links);
+
     await bridge.send('VKWebAppInit', {});
     var info = await bridge.send('VKWebAppGetUserInfo', {});
-    var uid = info.id; log('id='+uid);
-    var tok = await bridge.send('VKWebAppGetAuthToken', { app_id: APP_ID, scope: 'friends,groups' });
-    var access = tok.access_token;
+    uid = info.id; log('id='+uid);
+    var tok = await bridge.send('VKWebAppGetAuthToken', { app_id: Number(cfg.vkAppId), scope: 'friends,groups' });
 
-    var soyuz=false;
-    try{ var mem = await bridge.send('VKWebAppCallAPIMethod',{method:'groups.isMember',params:{group_id:SOYUZMASH,user_id:uid,access_token:access,v:API_V}});
-      soyuz = mem.response===1||mem.response===true; state.soyuzmash=soyuz;
-      setIcon('c-soyuzmash', soyuz?'ok':'bad', soyuz?'вы участник':'не участник — подпишитесь'); }
-    catch(e){ setIcon('c-soyuzmash','bad','ошибка'); }
-
-    var gut=false;
-    try{ var subs = await bridge.send('VKWebAppCallAPIMethod',{method:'users.getSubscriptions',params:{user_id:uid,count:200,access_token:access,v:API_V}});
-      var users=(subs.response&&subs.response.users&&subs.response.users.items)||[]; gut=users.indexOf(GUTENEV)>=0;
-      if(gut){ setIcon('c-gutenev','ok','подписаны'); } else { setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; } }
-    catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; }
+    var vkPassed = await checkVkChannels(tok.access_token);
 
     log('запрос к бэкенду…');
     var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({vkUserId:uid, vkGutenev:gut, vkSoyuzmash:soyuz})});
+      body:JSON.stringify({ vkUserId: uid, vkChannels: vkPassed })});
     var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
-    if(sess.maxUrl){ var am=document.getElementById('c-max'); am.href=sess.maxUrl; am.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('max-arrow').style.display='block'; }
-    if(sess.tgUrl){
-      // https://t.me/<bot>?start=<payload> → tg://resolve?domain=<bot>&start=<payload>
-      // Нативная схема надёжнее внутри webview ВК: универсальная https-ссылка
-      // иногда просто выводит Telegram на передний план без передачи start.
-      var m = sess.tgUrl.match(/t\.me\/([^?]+)\?start=(.+)$/);
-      var at=document.getElementById('c-tg');
-      at.href = m ? ('tg://resolve?domain='+m[1]+'&start='+m[2]) : sess.tgUrl;
-      at.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('tg-arrow').style.display='block';
-    }
-    else { document.getElementById('c-tg').querySelector('span').textContent='скоро'; }
+    links = { maxUrl: sess.maxUrl, tgUrl: sess.tgUrl };
+    applyStatus(sess.status);
     poll();
-  }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))); }
+  }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))) }
+}
+
+function applyStatus(s){
+  if(!s) return;
+  (s.confirmed||[]).forEach(function(id){ confirmed[id]=true });
+  renderChecks(s.detail, links);
+  show($('to-submit'), !!s.completed && cfg.submissionOpen);
 }
 
 async function poll(){
   if(!sid) return;
-  try{ var s = await (await fetch(BACKEND+'/api/status?sid='+sid)).json();
-    if(s.max && !state.max){ state.max=true; setIcon('c-max','ok','подписка подтверждена'); var a=document.getElementById('max-arrow'); if(a) a.style.display='none'; }
-    if(s.tg && !state.tg){ state.tg=true; setIcon('c-tg','ok','подписка подтверждена'); var b=document.getElementById('tg-arrow'); if(b) b.style.display='none'; }
-    checkDone();
-  }catch(e){}
-  pollTimer = setTimeout(poll, 4000);
+  try{ applyStatus(await (await fetch(BACKEND+'/api/status?sid='+sid)).json()) }catch(e){}
+  setTimeout(poll, 4000);
 }
 
-document.getElementById('participate').onclick = function(){
-  // TODO: экран самого голосования (6 номинаций). Пока заглушка.
-  document.getElementById('done').textContent = '✓ Вы допущены к участию. Голосование скоро откроется.';
-  this.style.display='none';
+/* ---------- каталог ---------- */
+async function loadNominations(){
+  try{
+    var r = await (await fetch(BACKEND+'/api/nominations')).json();
+    noms = r.nominations || [];
+  }catch(e){ noms = [] }
+}
+
+function renderChips(){
+  var html = '<div class="chip'+(curNom===''?' on':'')+'" data-n="">Все</div>';
+  noms.forEach(function(n){
+    html += '<div class="chip'+(curNom===n.id?' on':'')+'" data-n="'+esc(n.id)+'">'+esc(n.title)+'</div>';
+  });
+  $('chips').innerHTML = html;
+  Array.prototype.forEach.call($('chips').querySelectorAll('.chip'), function(c){
+    c.onclick = function(){ curNom = c.dataset.n; page = 1; $('works').innerHTML=''; loadWorks() };
+  });
+}
+
+async function loadWorks(){
+  if(loading) return; loading = true;
+  try{
+    var url = BACKEND+'/api/works?page='+page+(curNom?'&nomination='+encodeURIComponent(curNom):'');
+    var r = await (await fetch(url)).json();
+    var rows = r.rows || [];
+    $('cat-count').textContent = r.total ? ('Всего работ: '+r.total) : '';
+    if(page===1 && !rows.length){
+      $('works').innerHTML = '<div class="empty">В этой номинации пока нет работ</div>';
+    } else {
+      rows.forEach(function(w){
+        var d = document.createElement('div');
+        d.className = 'work';
+        d.innerHTML = '<div class="thumb">▶</div><div class="meta"><b>'+esc(w.title)+'</b>'+
+          '<span>'+esc(w.nomination_title)+'</span></div>';
+        d.onclick = function(){ openWork(w) };
+        $('works').appendChild(d);
+      });
+    }
+    show($('more'), rows.length >= 24);
+  }catch(e){ $('works').innerHTML = '<div class="empty">Не удалось загрузить работы</div>' }
+  loading = false;
+}
+$('more').onclick = function(){ page++; loadWorks() };
+
+function openWork(w){
+  var embed = 'https://vk.com/video_ext.php?oid='+w.video_owner_id+'&id='+w.video_id+'&hd=2';
+  $('work-body').innerHTML =
+    '<iframe class="player" src="'+esc(embed)+'" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>'+
+    '<h2>'+esc(w.title)+'</h2>'+
+    '<p class="sub">'+esc(w.nomination_title)+'</p>'+
+    (w.description ? '<p>'+esc(w.description)+'</p>' : '')+
+    '<a class="btn btn-sec" href="'+esc(w.video_url)+'" target="_blank" rel="noopener">Открыть видео во ВКонтакте</a>';
+  showView('work');
+}
+
+/* ---------- подача работы ---------- */
+function renderSubmitForm(){
+  var prog = '', opts = '';
+  noms.forEach(function(n){
+    var pct = Math.round(100 * n.taken / n.max_works);
+    prog += '<div><div class="nom-row"><span class="n">'+esc(n.title)+'</span>'+
+      '<span class="c">'+n.taken+'/'+n.max_works+'</span></div>'+
+      '<div class="bar'+(n.full?' full':'')+'"><i style="width:'+pct+'%"></i></div></div>';
+    opts += '<option value="'+esc(n.id)+'"'+(n.full?' disabled':'')+'>'+esc(n.title)+
+      (n.full?' — мест нет':' — свободно '+n.free)+'</option>';
+  });
+  $('nom-progress').innerHTML = prog;
+  $('f-nom').innerHTML = opts;
+}
+
+$('do-submit').onclick = async function(){
+  var btn = this; $('submit-msg').innerHTML = '';
+  var payload = {
+    vkUserId: uid,
+    nominationId: $('f-nom').value,
+    title: $('f-title').value,
+    videoUrl: $('f-url').value,
+    description: $('f-desc').value
+  };
+  btn.disabled = true; btn.textContent = 'Отправляем…';
+  try{
+    var r = await fetch(BACKEND+'/api/works', {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)});
+    var res = await r.json();
+    if(res.ok){
+      $('submit-msg').innerHTML = '<div class="okmsg">Работа отправлена и появится в каталоге после проверки организаторами. Занято мест: '+res.taken+' из '+res.max+'.</div>';
+      $('f-title').value = ''; $('f-url').value = ''; $('f-desc').value = '';
+      await loadNominations(); renderSubmitForm();
+    } else {
+      $('submit-msg').innerHTML = '<div class="err">'+esc(res.error || 'Не удалось отправить работу')+'</div>';
+    }
+  }catch(e){
+    $('submit-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>';
+  }
+  btn.disabled = false; btn.textContent = 'Отправить работу';
+};
+
+/* ---------- переходы ---------- */
+$('to-catalog').onclick = async function(){
+  showView('catalog');
+  if(!noms.length) await loadNominations();
+  renderChips();
+  if(!$('works').children.length) loadWorks();
+};
+$('to-submit').onclick = async function(){
+  showView('submit');
+  if(!noms.length) await loadNominations();
+  renderSubmitForm();
 };
 
 if (bridge) { run(); }
-else { log('Откройте страницу как мини-приложение внутри ВКонтакте.'); }
+else { log('Откройте страницу как мини-приложение внутри ВКонтакте.') }
 </script>
 </body>
 </html>
