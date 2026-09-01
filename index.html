@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Цех историй</title>
+<!-- Мосты трёх площадок. MAX внедряет window.WebApp сам, поэтому скрипта нет. -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <style>
   :root { --bg:#fff; --fg:#111; --muted:#7a7a7a; --ok:#1a9c4e; --bad:#d23; --wait:#e79a12; --line:#e6e6e6; --card:#f6f7f8; --accent:#2787f5; }
@@ -15,14 +17,12 @@
   p.sub { color:var(--muted); margin:0 0 16px; font-size:14px }
   .group-title { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px }
 
-  .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px; text-decoration:none; color:inherit }
-  a.check:active { opacity:.7 }
+  .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px }
   .icon { width:26px; height:26px; border-radius:50%; flex:0 0 26px; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--line); color:var(--muted) }
   .icon.ok{background:var(--ok);color:#fff} .icon.bad{background:var(--bad);color:#fff}
   .icon.wait{background:var(--wait);color:#fff} .icon.pend{background:var(--accent);color:#fff}
-  .label { flex:1 } .label b { display:block } .label span { color:var(--muted); font-size:13px }
-  /* Проверка, которую ещё надо пройти: карточка с явными действиями,
-     а не строка со стрелкой — стрелку не читают как кнопку. */
+  .label { flex:1; min-width:0 } .label b { display:block } .label span { color:var(--muted); font-size:13px }
+
   .todo { background:var(--card); border-radius:12px; margin-bottom:10px; padding:14px 14px 12px }
   .todo .head { display:flex; align-items:center; gap:12px; margin-bottom:12px }
   .todo .acts { display:flex; gap:8px }
@@ -34,7 +34,6 @@
   .manual { margin-top:10px; font-size:12px; color:var(--muted) }
   .manual input { width:100%; margin-top:6px; padding:9px 10px; border:1px solid var(--line);
     border-radius:8px; background:var(--bg); color:var(--fg); font-size:12px; font-family:inherit }
-  .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:14px }
 
   button, .btn { display:block; width:100%; padding:14px; border:0; border-radius:12px; background:var(--accent); color:#fff;
     font-size:15px; font-weight:600; margin-top:10px; text-align:center; text-decoration:none; cursor:pointer; font-family:inherit }
@@ -49,7 +48,6 @@
   .chip.on { background:var(--accent); color:#fff; border-color:var(--accent) }
 
   .work { display:flex; gap:12px; padding:12px; background:var(--card); border-radius:12px; margin-bottom:10px; cursor:pointer }
-  .work:active{opacity:.8}
   .work .thumb { width:64px; height:64px; flex:0 0 64px; border-radius:9px; background:var(--line);
     display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--muted) }
   .work .meta { flex:1; min-width:0 }
@@ -68,31 +66,30 @@
   textarea { min-height:80px; resize:vertical }
   .err { background:rgba(221,51,51,.12); color:var(--bad); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
   .okmsg { background:rgba(26,156,78,.12); color:var(--ok); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
+  .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:12px }
   .player { width:100%; aspect-ratio:16/9; border:0; border-radius:12px; background:#000; margin-bottom:12px }
   .empty { color:var(--muted); text-align:center; padding:28px 0; font-size:14px }
+  .badge { display:inline-block; font-size:11px; color:var(--muted); border:1px solid var(--line);
+    border-radius:6px; padding:2px 7px; margin-left:6px; vertical-align:middle }
   #log { margin-top:14px; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; opacity:.7 }
   .hide { display:none }
 </style>
 </head>
 <body>
 
-<!-- ЭКРАН 1 · проверки -->
 <div id="v-checks">
-  <h1>Цех историй</h1>
-  <p class="sub">Подтвердите подписки, чтобы участвовать в голосовании.</p>
-
+  <h1>Цех историй <span class="badge" id="plat"></span></h1>
+  <p class="sub">Загрузка…</p>
   <div id="checks"></div>
   <div class="note hide" id="vk-note">
     Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
     сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
   </div>
-
   <button id="to-catalog" class="btn-sec">Смотреть работы</button>
   <button id="to-submit" class="hide">Подать свою работу</button>
   <div id="log"></div>
 </div>
 
-<!-- ЭКРАН 2 · каталог -->
 <div id="v-catalog" class="hide">
   <button class="back" data-to="checks">← Назад</button>
   <h1>Работы конкурса</h1>
@@ -102,21 +99,17 @@
   <button id="more" class="btn-sec hide">Показать ещё</button>
 </div>
 
-<!-- ЭКРАН 3 · карточка работы -->
 <div id="v-work" class="hide">
   <button class="back" data-to="catalog">← К списку</button>
   <div id="work-body"></div>
 </div>
 
-<!-- ЭКРАН 4 · подача работы -->
 <div id="v-submit" class="hide">
   <button class="back" data-to="checks">← Назад</button>
   <h1>Подать работу</h1>
   <p class="sub">Видео должно быть загружено во ВКонтакте — укажите ссылку на него.</p>
-
   <div class="group-title">Свободные места</div>
   <div id="nom-progress"></div>
-
   <label for="f-nom">Номинация</label>
   <select id="f-nom"></select>
   <label for="f-title">Название работы</label>
@@ -125,7 +118,6 @@
   <input type="text" id="f-url" placeholder="https://vk.com/video-123456_789012">
   <label for="f-desc">Описание (необязательно)</label>
   <textarea id="f-desc" maxlength="2000" placeholder="Пара слов о вашей истории"></textarea>
-
   <button id="do-submit">Отправить работу</button>
   <div id="submit-msg"></div>
 </div>
@@ -134,20 +126,59 @@
 var API_V = '5.199';
 var BACKEND = 'https://ef-server.tailfacff5.ts.net';
 
-var bridge = window.vkBridge;
-var uid = null, sid = null;
-var cfg = null;                 // конфиг с сервера: правила и каналы
-var confirmed = {};             // id канала → подтверждён
-var myVotes = [];               // голоса этого человека
-var admitted = false;           // прошёл ли все проверки
+/* ================== адаптер площадки ==================
+   Одно приложение на три сети. Различия спрятаны здесь,
+   вся остальная логика и стили общие. */
+var P = (function(){
+  var tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData !== undefined
+        && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
+  var mx = window.WebApp && window.WebApp.initDataUnsafe;   // MAX внедряет сам
+  var vk = window.vkBridge;
+
+  if (tg) {
+    var W = window.Telegram.WebApp;
+    return {
+      name: 'tg', title: 'Telegram',
+      async init(){ try{ W.ready(); W.expand() }catch(e){} },
+      async userId(){ return W.initDataUnsafe.user.id },
+      canCheckVk: false,
+      async copy(text){ try{ await navigator.clipboard.writeText(text); return true }catch(e){ return false } },
+    };
+  }
+  if (mx) {
+    var M = window.WebApp;
+    return {
+      name: 'max', title: 'MAX',
+      async init(){},
+      async userId(){ var u = M.initDataUnsafe && M.initDataUnsafe.user; return u && u.id },
+      canCheckVk: false,
+      async copy(text){ try{ await navigator.clipboard.writeText(text); return true }catch(e){ return false } },
+    };
+  }
+  return {
+    name: 'vk', title: 'ВКонтакте',
+    async init(){ await vk.send('VKWebAppInit', {}) },
+    async userId(){ var i = await vk.send('VKWebAppGetUserInfo', {}); return i.id },
+    canCheckVk: true,
+    async vkToken(appId){ var t = await vk.send('VKWebAppGetAuthToken', { app_id: Number(appId), scope: 'friends,groups' }); return t.access_token },
+    async api(method, params){ return vk.send('VKWebAppCallAPIMethod', { method: method, params: params }) },
+    async copy(text){
+      try{ await vk.send('VKWebAppCopyText', { text: text }); return true }catch(e){}
+      try{ await navigator.clipboard.writeText(text); return true }catch(e){ return false }
+    },
+  };
+})();
+
+var uid = null, sid = null, voterId = null;
+var cfg = null, confirmed = {}, myVotes = [], admitted = false;
 var noms = [], curNom = '', page = 1, loading = false;
+var links = { maxUrl:null, tgUrl:null };
 
 var $ = function(id){ return document.getElementById(id) };
 function log(m){ $('log').textContent += m + '\n' }
 function show(el, yes){ el.classList.toggle('hide', !yes) }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c] }) }
-
 function showView(name){
   ['checks','catalog','work','submit'].forEach(function(v){ show($('v-'+v), v===name) });
   window.scrollTo(0,0);
@@ -160,47 +191,16 @@ Array.prototype.forEach.call(document.querySelectorAll('.back'), function(b){
 var BUCKET_TITLE = { vk:'ВКонтакте', max:'MAX', tg:'Telegram' };
 function bucketOf(p){ return p==='max' ? 'max' : p==='tg' ? 'tg' : 'vk' }
 
-/** Экран собирается из каналов, заданных в админке, а не из зашитого списка. */
-function renderChecks(detail, links){
-  var order = ['vk','max','tg'], html = '';
-  order.forEach(function(b){
+function renderChecks(detail){
+  var html = '';
+  ['vk','max','tg'].forEach(function(b){
     var list = cfg.channels.filter(function(c){ return bucketOf(c.platform)===b });
     if(!list.length) return;
     var d = (detail && detail[b]) || null;
     var cap = BUCKET_TITLE[b];
     if(d && d.need) cap += ' — нужно ' + d.need + ' из ' + d.total + ', подтверждено ' + d.have;
     html += '<div class="group-title">'+esc(cap)+'</div>';
-    list.forEach(function(c){
-      var ok = !!confirmed[c.id];
-      var raw = b==='max' ? links.maxUrl : b==='tg' ? links.tgUrl : null;
-      // Для перехода — нативная схема tg:// (надёжнее в webview ВК),
-      // для копирования — обычная https-ссылка, её можно вставить куда угодно.
-      var href = raw;
-      if(b==='tg' && raw){
-        var m = raw.match(/t\.me\/([^?]+)\?start=(.+)$/);
-        if(m) href = 'tg://resolve?domain='+m[1]+'&start='+m[2];
-      }
-
-      if(ok || b==='vk'){
-        var note = ok ? 'подтверждено'
-          : (c.required ? 'подписка не найдена' : 'сверим при подведении итогов');
-        html += '<div class="check">'+
-          '<div class="icon '+(ok?'ok':(c.required?'bad':'wait'))+'">'+(ok?'✓':(c.required?'✗':'⏳'))+'</div>'+
-          '<div class="label"><b>'+esc(c.title)+'</b><span>'+esc(note)+'</span></div></div>';
-        return;
-      }
-      // MAX / Telegram: явные кнопки вместо стрелки.
-      html += '<div class="todo">'+
-        '<div class="head"><div class="icon">·</div>'+
-        '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и нажмите «Старт» у бота</span></div></div>'+
-        '<div class="acts">'+
-          (href ? '<a class="btn-go" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Перейти и подтвердить</a>' : '')+
-          (raw ? '<button class="btn-copy" data-copy="'+esc(raw)+'">Копировать</button>' : '')+
-        '</div>'+
-        (raw ? '<div class="manual">Не открывается? Скопируйте ссылку и откройте вручную:'+
-               '<input type="text" readonly value="'+esc(raw)+'" onclick="this.select()"></div>' : '')+
-        '</div>';
-    });
+    list.forEach(function(c){ html += checkRow(c, b) });
   });
   $('checks').innerHTML = html || '<div class="empty">Проверки не настроены</div>';
   Array.prototype.forEach.call($('checks').querySelectorAll('.btn-copy'), function(btn){
@@ -208,12 +208,56 @@ function renderChecks(detail, links){
   });
 }
 
-/** Копирование: сначала штатный способ ВК, потом буфер браузера,
- *  в крайнем случае — выделяем поле, чтобы человек скопировал сам. */
+function checkRow(c, b){
+  var ok = !!confirmed[c.id];
+  if(ok){
+    return '<div class="check"><div class="icon ok">✓</div>'+
+      '<div class="label"><b>'+esc(c.title)+'</b><span>подтверждено</span></div></div>';
+  }
+  // ВК проверяется токеном пользователя ВК. На других площадках его нет,
+  // поэтому ведём человека в мини-приложение ВКонтакте.
+  if(b==='vk' && !P.canCheckVk){
+    var vkApp = cfg.vkAppUrl;
+    return '<div class="todo">'+
+      '<div class="head"><div class="icon">·</div>'+
+      '<div class="label"><b>'+esc(c.title)+'</b><span>подтверждается в приложении ВКонтакте</span></div></div>'+
+      (vkApp ? '<div class="acts">'+
+        '<a class="btn-go" href="'+esc(vkApp)+'" target="_blank" rel="noopener noreferrer">Открыть во ВКонтакте</a>'+
+        '<button class="btn-copy" data-copy="'+esc(vkApp)+'">Копировать</button></div>'+
+        '<div class="manual">Не открывается? Скопируйте ссылку:'+
+        '<input type="text" readonly value="'+esc(vkApp)+'" onclick="this.select()"></div>' : '')+
+      '</div>';
+  }
+  if(b==='vk'){
+    return '<div class="check"><div class="icon '+(c.required?'bad':'wait')+'">'+(c.required?'✗':'⏳')+'</div>'+
+      '<div class="label"><b>'+esc(c.title)+'</b><span>'+
+      (c.required?'подписка не найдена':'сверим при подведении итогов')+'</span></div></div>';
+  }
+  // Своя площадка уже подтверждена ботом — значит человек в ней и есть.
+  if(b===P.name){
+    return '<div class="check"><div class="icon">·</div>'+
+      '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и вернитесь сюда</span></div></div>';
+  }
+  var raw = b==='max' ? links.maxUrl : links.tgUrl;
+  var href = raw;
+  if(b==='tg' && raw){
+    var m = raw.match(/t\.me\/([^?]+)\?start=(.+)$/);
+    if(m) href = 'tg://resolve?domain='+m[1]+'&start='+m[2];
+  }
+  return '<div class="todo">'+
+    '<div class="head"><div class="icon">·</div>'+
+    '<div class="label"><b>'+esc(c.title)+'</b><span>подпишитесь и нажмите «Старт» у бота</span></div></div>'+
+    '<div class="acts">'+
+      (href ? '<a class="btn-go" href="'+esc(href)+'" target="_blank" rel="noopener noreferrer">Перейти и подтвердить</a>' : '')+
+      (raw ? '<button class="btn-copy" data-copy="'+esc(raw)+'">Копировать</button>' : '')+
+    '</div>'+
+    (raw ? '<div class="manual">Не открывается? Скопируйте ссылку и откройте вручную:'+
+           '<input type="text" readonly value="'+esc(raw)+'" onclick="this.select()"></div>' : '')+
+    '</div>';
+}
+
 async function copyText(text, btn){
-  var done = false;
-  try{ await bridge.send('VKWebAppCopyText', { text: text }); done = true }catch(e){}
-  if(!done){ try{ await navigator.clipboard.writeText(text); done = true }catch(e){} }
+  var done = await P.copy(text);
   if(done){
     var was = btn.textContent;
     btn.textContent = 'Скопировано'; btn.classList.add('done');
@@ -224,57 +268,58 @@ async function copyText(text, btn){
   }
 }
 
-/** Проверки ВК делаются на устройстве голосующего — сервер его токена не имеет. */
-async function checkVkChannels(access){
-  var passed = [], softMissing = false;
+/** Проверки ВК возможны только внутри ВК: нужен токен голосующего. */
+async function checkVkChannels(){
+  if(!P.canCheckVk) return [];
+  var passed = [], soft = false;
+  var access;
+  try{ access = await P.vkToken(cfg.vkAppId) }catch(e){ log('токен ВК не выдан'); return [] }
   var groups = cfg.channels.filter(function(c){ return c.platform==='vk_group' });
   var pages  = cfg.channels.filter(function(c){ return c.platform==='vk_user' });
-
   for(var i=0;i<groups.length;i++){
     var c = groups[i];
     try{
-      var mem = await bridge.send('VKWebAppCallAPIMethod',{method:'groups.isMember',
-        params:{group_id:c.ref, user_id:uid, access_token:access, v:API_V}});
+      var mem = await P.api('groups.isMember', {group_id:c.ref, user_id:uid, access_token:access, v:API_V});
       if(mem.response===1||mem.response===true){ passed.push(c.id); confirmed[c.id]=true }
-    }catch(e){ log('isMember '+c.ref+': ошибка') }
+    }catch(e){}
   }
   if(pages.length){
     try{
-      var subs = await bridge.send('VKWebAppCallAPIMethod',{method:'users.getSubscriptions',
-        params:{user_id:uid, count:200, access_token:access, v:API_V}});
+      var subs = await P.api('users.getSubscriptions', {user_id:uid, count:200, access_token:access, v:API_V});
       var users=(subs.response&&subs.response.users&&subs.response.users.items)||[];
       pages.forEach(function(c){
         if(users.indexOf(Number(c.ref))>=0){ passed.push(c.id); confirmed[c.id]=true }
-        else if(!c.required) softMissing = true;
+        else if(!c.required) soft = true;
       });
-    }catch(e){ pages.forEach(function(c){ if(!c.required) softMissing = true }) }
+    }catch(e){ pages.forEach(function(c){ if(!c.required) soft = true }) }
   }
-  show($('vk-note'), softMissing);
+  show($('vk-note'), soft);
   return passed;
 }
-
-var links = { maxUrl:null, tgUrl:null };
 
 async function run(){
   try{
     cfg = await (await fetch(BACKEND+'/api/config')).json();
     document.title = cfg.title;
-    $('v-checks').querySelector('h1').textContent = cfg.title;
+    $('v-checks').querySelector('h1').firstChild.textContent = cfg.title + ' ';
+    $('plat').textContent = P.title;
     $('v-checks').querySelector('.sub').textContent = cfg.subtitle;
-    renderChecks(null, links);
+    renderChecks(null);
 
-    await bridge.send('VKWebAppInit', {});
-    var info = await bridge.send('VKWebAppGetUserInfo', {});
-    uid = info.id; log('id='+uid);
-    var tok = await bridge.send('VKWebAppGetAuthToken', { app_id: Number(cfg.vkAppId), scope: 'friends,groups' });
+    await P.init();
+    uid = await P.userId();
+    log('площадка: '+P.name+', id='+uid);
 
-    var vkPassed = await checkVkChannels(tok.access_token);
+    var vkPassed = await checkVkChannels();
 
-    log('запрос к бэкенду…');
+    var payload = { platform: P.name, vkChannels: vkPassed };
+    if(P.name==='vk') payload.vkUserId = uid; else payload.extUserId = uid;
     var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ vkUserId: uid, vkChannels: vkPassed })});
-    var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
+      body:JSON.stringify(payload)});
+    var sess = await r.json();
+    sid = sess.sid; voterId = sess.voterId;
     links = { maxUrl: sess.maxUrl, tgUrl: sess.tgUrl };
+    log('сессия '+sid);
     await loadMyVotes();
     applyStatus(sess.status);
     poll();
@@ -284,33 +329,33 @@ async function run(){
 function applyStatus(s){
   if(!s) return;
   (s.confirmed||[]).forEach(function(id){ confirmed[id]=true });
-  renderChecks(s.detail, links);
-  show($('to-submit'), !!s.completed && cfg.submissionOpen);
-  if(s.completed && !admitted) loadMyVotes();   // допуск получен — подтянем голоса
+  renderChecks(s.detail);
+  show($('to-submit'), !!s.completed && cfg.submissionOpen && P.name==='vk');
+  if(s.completed && !admitted) loadMyVotes();
 }
 
 async function loadMyVotes(){
-  if(!uid) return;
+  if(!voterId) return;
   try{
-    var r = await (await fetch(BACKEND+'/api/my-votes?vkUserId='+uid)).json();
+    var r = await (await fetch(BACKEND+'/api/my-votes?voterId='+voterId)).json();
     myVotes = r.votes || []; admitted = !!r.admitted;
   }catch(e){}
 }
 
 async function poll(){
   if(!sid) return;
-  try{ applyStatus(await (await fetch(BACKEND+'/api/status?sid='+sid)).json()) }catch(e){}
+  try{
+    var s = await (await fetch(BACKEND+'/api/status?sid='+sid)).json();
+    if(s.voterId) voterId = s.voterId;
+    applyStatus(s);
+  }catch(e){}
   setTimeout(poll, 4000);
 }
 
 /* ---------- каталог ---------- */
 async function loadNominations(){
-  try{
-    var r = await (await fetch(BACKEND+'/api/nominations')).json();
-    noms = r.nominations || [];
-  }catch(e){ noms = [] }
+  try{ noms = (await (await fetch(BACKEND+'/api/nominations')).json()).nominations || [] }catch(e){ noms = [] }
 }
-
 function renderChips(){
   var html = '<div class="chip'+(curNom===''?' on':'')+'" data-n="">Все</div>';
   noms.forEach(function(n){
@@ -321,7 +366,6 @@ function renderChips(){
     c.onclick = function(){ curNom = c.dataset.n; page = 1; $('works').innerHTML=''; loadWorks() };
   });
 }
-
 async function loadWorks(){
   if(loading) return; loading = true;
   try{
@@ -336,7 +380,7 @@ async function loadWorks(){
         var d = document.createElement('div');
         d.className = 'work';
         d.innerHTML = '<div class="thumb">▶</div><div class="meta"><b>'+esc(w.title)+'</b>'+
-          '<span>'+esc(w.nomination_title)+'</span></div>';
+          '<span>'+esc(w.nomination_title)+' · голосов: '+(w.votes||0)+'</span></div>';
         d.onclick = function(){ openWork(w) };
         $('works').appendChild(d);
       });
@@ -351,26 +395,21 @@ function openWork(w){
   var embed = 'https://vk.com/video_ext.php?oid='+w.video_owner_id+'&id='+w.video_id+'&hd=2';
   var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
   var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
-
-  var voteBlock = '';
+  var voteBlock;
   if(cfg && cfg.votingOpen){
     if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
     else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
     else if(!admitted) voteBlock = '<div class="note">Чтобы голосовать, подтвердите подписки на первом экране.</div>';
     else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
-  } else {
-    voteBlock = '<div class="note">Голосование ещё не открыто.</div>';
-  }
+  } else voteBlock = '<div class="note">Голосование ещё не открыто.</div>';
 
   $('work-body').innerHTML =
     '<iframe class="player" src="'+esc(embed)+'" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>'+
     '<h2>'+esc(w.title)+'</h2>'+
     '<p class="sub">'+esc(w.nomination_title)+' · голосов: '+(w.votes||0)+'</p>'+
     (w.description ? '<p>'+esc(w.description)+'</p>' : '')+
-    voteBlock+
-    '<div id="vote-msg"></div>'+
+    voteBlock + '<div id="vote-msg"></div>'+
     '<a class="btn btn-sec" href="'+esc(w.video_url)+'" target="_blank" rel="noopener">Открыть видео во ВКонтакте</a>';
-
   var vb = $('do-vote');
   if(vb) vb.onclick = function(){ castVote(w, vb) };
   showView('work');
@@ -379,13 +418,12 @@ function openWork(w){
 async function castVote(w, btn){
   btn.disabled = true; btn.textContent = 'Отправляем…';
   try{
-    var r = await fetch(BACKEND+'/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ workId: w.id, vkUserId: uid, sid: sid })});
-    var res = await r.json();
+    var res = await (await fetch(BACKEND+'/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ workId: w.id, voterId: voterId, sid: sid })})).json();
     if(res.ok){
       myVotes.push({ work_id: w.id, nomination_id: w.nomination_id });
       w.votes = (w.votes||0) + 1;
-      openWork(w);                      // перерисовываем карточку с учтённым голосом
+      openWork(w);
       page = 1; $('works').innerHTML=''; loadWorks();
     } else {
       btn.disabled = false; btn.textContent = 'Голосовать за эту работу';
@@ -414,32 +452,24 @@ function renderSubmitForm(){
 
 $('do-submit').onclick = async function(){
   var btn = this; $('submit-msg').innerHTML = '';
-  var payload = {
-    vkUserId: uid,
-    nominationId: $('f-nom').value,
-    title: $('f-title').value,
-    videoUrl: $('f-url').value,
-    description: $('f-desc').value
-  };
   btn.disabled = true; btn.textContent = 'Отправляем…';
   try{
-    var r = await fetch(BACKEND+'/api/works', {method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)});
-    var res = await r.json();
+    var res = await (await fetch(BACKEND+'/api/works', {method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ vkUserId: uid, nominationId: $('f-nom').value, title: $('f-title').value,
+                             videoUrl: $('f-url').value, description: $('f-desc').value })})).json();
     if(res.ok){
-      $('submit-msg').innerHTML = '<div class="okmsg">Работа отправлена и появится в каталоге после проверки организаторами. Занято мест: '+res.taken+' из '+res.max+'.</div>';
-      $('f-title').value = ''; $('f-url').value = ''; $('f-desc').value = '';
+      $('submit-msg').innerHTML = '<div class="okmsg">Работа отправлена'+
+        (res.moderated ? ' и появится в каталоге после проверки организаторами' : '')+
+        '. Занято мест: '+res.taken+' из '+res.max+'.</div>';
+      $('f-title').value=''; $('f-url').value=''; $('f-desc').value='';
       await loadNominations(); renderSubmitForm();
     } else {
       $('submit-msg').innerHTML = '<div class="err">'+esc(res.error || 'Не удалось отправить работу')+'</div>';
     }
-  }catch(e){
-    $('submit-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>';
-  }
+  }catch(e){ $('submit-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>' }
   btn.disabled = false; btn.textContent = 'Отправить работу';
 };
 
-/* ---------- переходы ---------- */
 $('to-catalog').onclick = async function(){
   showView('catalog');
   if(!noms.length) await loadNominations();
@@ -452,8 +482,7 @@ $('to-submit').onclick = async function(){
   renderSubmitForm();
 };
 
-if (bridge) { run(); }
-else { log('Откройте страницу как мини-приложение внутри ВКонтакте.') }
+run();
 </script>
 </body>
 </html>
