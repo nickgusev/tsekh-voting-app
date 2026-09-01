@@ -24,10 +24,11 @@
   .label b { display:block }
   .label span { color:var(--muted); font-size:13px }
   .arrow { color:var(--accent); font-size:20px }
-  .soon { opacity:.5 }
   .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:14px }
   #log { margin-top:14px; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; opacity:.7 }
-  #done { display:none; text-align:center; padding:16px; background:var(--ok); color:#fff; border-radius:12px; font-weight:600; margin-top:14px }
+  #done { display:none; text-align:center; padding:14px; background:var(--ok); color:#fff; border-radius:12px; font-weight:600; margin-top:14px }
+  #participate { display:none; width:100%; margin-top:10px; padding:16px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-size:16px; font-weight:600; }
+  #participate:active { opacity:.85 }
 </style>
 </head>
 <body>
@@ -45,10 +46,11 @@
   <div class="label"><b>Канал в MAX</b><span>загрузка…</span></div>
   <div class="arrow" id="max-arrow" style="display:none">→</div>
 </a>
-<div class="check soon" id="c-tg">
+<a class="check" id="c-tg" target="_blank" rel="noopener">
   <div class="icon">·</div>
-  <div class="label"><b>Канал в Telegram</b><span>скоро</span></div>
-</div>
+  <div class="label"><b>Канал в Telegram</b><span>загрузка…</span></div>
+  <div class="arrow" id="tg-arrow" style="display:none">→</div>
+</a>
 
 <div class="group-title">Проверяется отдельно</div>
 
@@ -62,7 +64,8 @@
   сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
 </div>
 
-<div id="done">✓ Все условия выполнены — вы участвуете!</div>
+<div id="done">✓ Все условия выполнены</div>
+<button id="participate">Перейти к участию →</button>
 <div id="log"></div>
 
 <script>
@@ -75,7 +78,12 @@ var state = { soyuzmash:false, max:false, tg:false };
 function log(m){ var el=document.getElementById('log'); el.textContent += m + '\n'; }
 function setIcon(id, s, note){ var c=document.getElementById(id), i=c.querySelector('.icon');
   i.className='icon '+s; i.textContent = s==='ok'?'✓':s==='bad'?'✗':s==='wait'?'⏳':'…'; if(note) c.querySelector('span').textContent=note; }
-function checkDone(){ if(state.soyuzmash && state.max){ document.getElementById('done').style.display='block'; } }
+function checkDone(){
+  if(state.soyuzmash && state.max && state.tg){
+    document.getElementById('done').style.display='block';
+    document.getElementById('participate').style.display='block';
+  }
+}
 
 async function run(){
   setIcon('c-soyuzmash','pend'); setIcon('c-gutenev','pend');
@@ -86,28 +94,25 @@ async function run(){
     var tok = await bridge.send('VKWebAppGetAuthToken', { app_id: APP_ID, scope: 'friends,groups' });
     var access = tok.access_token;
 
-    // ВК: сообщество (обязательно)
     var soyuz=false;
     try{ var mem = await bridge.send('VKWebAppCallAPIMethod',{method:'groups.isMember',params:{group_id:SOYUZMASH,user_id:uid,access_token:access,v:API_V}});
       soyuz = mem.response===1||mem.response===true; state.soyuzmash=soyuz;
       setIcon('c-soyuzmash', soyuz?'ok':'bad', soyuz?'вы участник':'не участник — подпишитесь'); }
     catch(e){ setIcon('c-soyuzmash','bad','ошибка'); }
 
-    // ВК: личная страница (мягко)
     var gut=false;
     try{ var subs = await bridge.send('VKWebAppCallAPIMethod',{method:'users.getSubscriptions',params:{user_id:uid,count:200,access_token:access,v:API_V}});
       var users=(subs.response&&subs.response.users&&subs.response.users.items)||[]; gut=users.indexOf(GUTENEV)>=0;
       if(gut){ setIcon('c-gutenev','ok','подписаны'); } else { setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; } }
     catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; }
 
-    // Бэкенд: создать сессию, получить ссылки
     log('запрос к бэкенду…');
     var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({vkUserId:uid, vkGutenev:gut, vkSoyuzmash:soyuz})});
     var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
-    if(sess.maxUrl){ var a=document.getElementById('c-max'); a.href=sess.maxUrl;
-      a.querySelector('span').textContent='нажмите, чтобы подписаться';
-      document.getElementById('max-arrow').style.display='block'; }
+    if(sess.maxUrl){ var am=document.getElementById('c-max'); am.href=sess.maxUrl; am.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('max-arrow').style.display='block'; }
+    if(sess.tgUrl){ var at=document.getElementById('c-tg'); at.href=sess.tgUrl; at.querySelector('span').textContent='нажмите, чтобы подписаться'; document.getElementById('tg-arrow').style.display='block'; }
+    else { document.getElementById('c-tg').querySelector('span').textContent='скоро'; }
     poll();
   }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))); }
 }
@@ -115,12 +120,18 @@ async function run(){
 async function poll(){
   if(!sid) return;
   try{ var s = await (await fetch(BACKEND+'/api/status?sid='+sid)).json();
-    if(s.max && !state.max){ state.max=true; setIcon('c-max','ok','подписка подтверждена'); document.getElementById('max-arrow').style.display='none'; }
-    if(s.tg && !state.tg){ state.tg=true; setIcon('c-tg','ok','подтверждено'); }
+    if(s.max && !state.max){ state.max=true; setIcon('c-max','ok','подписка подтверждена'); var a=document.getElementById('max-arrow'); if(a) a.style.display='none'; }
+    if(s.tg && !state.tg){ state.tg=true; setIcon('c-tg','ok','подписка подтверждена'); var b=document.getElementById('tg-arrow'); if(b) b.style.display='none'; }
     checkDone();
   }catch(e){}
   pollTimer = setTimeout(poll, 4000);
 }
+
+document.getElementById('participate').onclick = function(){
+  // TODO: экран самого голосования (6 номинаций). Пока заглушка.
+  document.getElementById('done').textContent = '✓ Вы допущены к участию. Голосование скоро откроется.';
+  this.style.display='none';
+};
 
 if (bridge) { run(); }
 else { log('Откройте страницу как мини-приложение внутри ВКонтакте.'); }
