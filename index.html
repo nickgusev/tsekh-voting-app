@@ -101,14 +101,15 @@ async function run(){
     catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; }
 
     // Бэкенд: создать сессию, получить ссылки
+    log('запрос к бэкенду…');
     var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({vkUserId:uid, vkGutenev:gut, vkSoyuzmash:soyuz})});
-    var sess = await r.json(); sid = sess.sid;
+    var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
     if(sess.maxUrl){ var a=document.getElementById('c-max'); a.href=sess.maxUrl;
       a.querySelector('span').textContent='нажмите, чтобы подписаться';
       document.getElementById('max-arrow').style.display='block'; }
     poll();
-  }catch(e){ log('ОШИБКА: '+JSON.stringify(e)); }
+  }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))); }
 }
 
 async function poll(){
