@@ -6,22 +6,25 @@
 <title>Цех историй — проверка подписки</title>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <style>
-  :root { --bg:#fff; --fg:#111; --muted:#7a7a7a; --ok:#1a9c4e; --bad:#d23; --line:#e6e6e6; --card:#f6f7f8; --accent:#2787f5; }
+  :root { --bg:#fff; --fg:#111; --muted:#7a7a7a; --ok:#1a9c4e; --bad:#d23; --wait:#e79a12; --line:#e6e6e6; --card:#f6f7f8; --accent:#2787f5; }
   @media (prefers-color-scheme: dark){ :root{ --bg:#111418; --fg:#eaeaea; --muted:#8a9099; --card:#1b1f25; --line:#2a2f36; } }
   * { box-sizing:border-box }
   body { margin:0; font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); padding:16px }
   h1 { font-size:18px; margin:0 0 4px }
   p.sub { color:var(--muted); margin:0 0 16px }
+  .group-title { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px }
   .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px }
   .icon { width:26px; height:26px; border-radius:50%; flex:0 0 26px; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--line); color:var(--muted) }
   .icon.ok { background:var(--ok); color:#fff }
   .icon.bad { background:var(--bad); color:#fff }
-  .icon.wait { background:var(--accent); color:#fff }
+  .icon.wait { background:var(--wait); color:#fff }
+  .icon.pend { background:var(--accent); color:#fff }
   .label { flex:1 }
   .label b { display:block }
   .label span { color:var(--muted); font-size:13px }
   .soon { opacity:.5 }
-  #log { margin-top:16px; font-size:12px; color:var(--muted); white-space:pre-wrap; word-break:break-word }
+  .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:14px }
+  #log { margin-top:14px; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; opacity:.7 }
   button { width:100%; padding:12px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:15px; margin-top:8px }
 </style>
 </head>
@@ -29,12 +32,10 @@
 <h1>Цех историй</h1>
 <p class="sub">Проверяем ваши подписки для участия в голосовании.</p>
 
-<div class="check" id="c-gutenev">
-  <div class="icon wait">…</div>
-  <div class="label"><b>Личная страница Гутенева</b><span>ВКонтакте</span></div>
-</div>
+<div class="group-title">Обязательно для участия</div>
+
 <div class="check" id="c-soyuzmash">
-  <div class="icon wait">…</div>
+  <div class="icon pend">…</div>
   <div class="label"><b>Сообщество СоюзМаш</b><span>ВКонтакте</span></div>
 </div>
 <div class="check soon" id="c-max">
@@ -46,28 +47,40 @@
   <div class="label"><b>Канал в Telegram</b><span>скоро — по ссылке</span></div>
 </div>
 
+<div class="group-title">Проверяется отдельно</div>
+
+<div class="check" id="c-gutenev">
+  <div class="icon pend">…</div>
+  <div class="label"><b>Личная страница Гутенева</b><span>ВКонтакте</span></div>
+</div>
+
+<div class="note" id="gutenev-note" style="display:none">
+  Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
+  сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем, даже если
+  сейчас отметка ещё не появилась.
+</div>
+
 <button id="retry" style="display:none">Повторить проверку</button>
 <div id="log"></div>
 
 <script>
-// --- конфигурация ---
-var GUTENEV = 708816212;    // личная страница Гутенева
-var SOYUZMASH = 57715265;   // сообщество СоюзМаш
-var APP_ID = 54748142;      // «СоюзМаш. Цех историй»
+var GUTENEV = 708816212;
+var SOYUZMASH = 57715265;
+var APP_ID = 54748142;
 var API_V = '5.199';
 
 var bridge = window.vkBridge;
 function log(m){ var el=document.getElementById('log'); el.textContent += m + '\n'; }
 function setIcon(id, state, note){
   var c=document.getElementById(id); var i=c.querySelector('.icon');
-  i.className='icon '+(state==='ok'?'ok':state==='bad'?'bad':'wait');
-  i.textContent = state==='ok'?'✓':state==='bad'?'✗':'…';
+  i.className='icon '+state;
+  i.textContent = state==='ok'?'✓':state==='bad'?'✗':state==='wait'?'⏳':'…';
   if(note){ c.querySelector('span').textContent = note; }
 }
 
 async function run(){
   document.getElementById('retry').style.display='none';
-  setIcon('c-gutenev','wait'); setIcon('c-soyuzmash','wait');
+  setIcon('c-soyuzmash','pend'); setIcon('c-gutenev','pend');
   try{
     await bridge.send('VKWebAppInit', {});
     var info = await bridge.send('VKWebAppGetUserInfo', {});
@@ -78,28 +91,33 @@ async function run(){
     var access = tok.access_token;
     log('токен получен, scope: ' + (tok.scope||''));
 
-    // проверка 1: подписка на личную страницу Гутенева
+    // Обязательное: членство в сообществе СоюзМаш — мгновенно и надёжно
+    try{
+      var mem = await bridge.send('VKWebAppCallAPIMethod', {
+        method:'groups.isMember', params:{ group_id:SOYUZMASH, user_id:uid, access_token:access, v:API_V }
+      });
+      var m = mem.response === 1 || mem.response === true;
+      setIcon('c-soyuzmash', m?'ok':'bad', m?'вы участник':'не участник — подпишитесь');
+    }catch(e){ setIcon('c-soyuzmash','bad','ошибка проверки'); log('isMember: '+JSON.stringify(e)); }
+
+    // Отдельно: подписка на личную страницу — мягкая, с пост-проверкой
     try{
       var subs = await bridge.send('VKWebAppCallAPIMethod', {
         method:'users.getSubscriptions', params:{ user_id:uid, count:200, access_token:access, v:API_V }
       });
       var users = (subs.response && subs.response.users && subs.response.users.items) || [];
       var g = users.indexOf(GUTENEV) >= 0;
-      setIcon('c-gutenev', g?'ok':'bad', g?'подписаны':'не подписаны');
-    }catch(e){ setIcon('c-gutenev','bad','ошибка проверки'); log('getSubscriptions: '+JSON.stringify(e)); }
-
-    // проверка 2: членство в сообществе СоюзМаш
-    try{
-      var mem = await bridge.send('VKWebAppCallAPIMethod', {
-        method:'groups.isMember', params:{ group_id:SOYUZMASH, user_id:uid, access_token:access, v:API_V }
-      });
-      var m = mem.response === 1 || mem.response === true;
-      setIcon('c-soyuzmash', m?'ok':'bad', m?'вы участник':'не участник');
-    }catch(e){ setIcon('c-soyuzmash','bad','ошибка проверки'); log('isMember: '+JSON.stringify(e)); }
+      if (g) {
+        setIcon('c-gutenev','ok','подписаны');
+        document.getElementById('gutenev-note').style.display='none';
+      } else {
+        setIcon('c-gutenev','wait','сверим при подведении итогов');
+        document.getElementById('gutenev-note').style.display='block';
+      }
+    }catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; log('getSubscriptions: '+JSON.stringify(e)); }
 
   }catch(e){
     log('ОШИБКА: ' + JSON.stringify(e));
-    setIcon('c-gutenev','bad'); setIcon('c-soyuzmash','bad');
     document.getElementById('retry').style.display='block';
   }
 }
