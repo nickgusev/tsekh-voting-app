@@ -138,6 +138,8 @@ var bridge = window.vkBridge;
 var uid = null, sid = null;
 var cfg = null;                 // конфиг с сервера: правила и каналы
 var confirmed = {};             // id канала → подтверждён
+var myVotes = [];               // голоса этого человека
+var admitted = false;           // прошёл ли все проверки
 var noms = [], curNom = '', page = 1, loading = false;
 
 var $ = function(id){ return document.getElementById(id) };
@@ -273,6 +275,7 @@ async function run(){
       body:JSON.stringify({ vkUserId: uid, vkChannels: vkPassed })});
     var sess = await r.json(); sid = sess.sid; log('сессия '+sid);
     links = { maxUrl: sess.maxUrl, tgUrl: sess.tgUrl };
+    await loadMyVotes();
     applyStatus(sess.status);
     poll();
   }catch(e){ log('ОШИБКА: '+(e && (e.message||e.name) ? (e.name+': '+e.message) : JSON.stringify(e))) }
@@ -283,6 +286,15 @@ function applyStatus(s){
   (s.confirmed||[]).forEach(function(id){ confirmed[id]=true });
   renderChecks(s.detail, links);
   show($('to-submit'), !!s.completed && cfg.submissionOpen);
+  if(s.completed && !admitted) loadMyVotes();   // допуск получен — подтянем голоса
+}
+
+async function loadMyVotes(){
+  if(!uid) return;
+  try{
+    var r = await (await fetch(BACKEND+'/api/my-votes?vkUserId='+uid)).json();
+    myVotes = r.votes || []; admitted = !!r.admitted;
+  }catch(e){}
 }
 
 async function poll(){
@@ -337,13 +349,52 @@ $('more').onclick = function(){ page++; loadWorks() };
 
 function openWork(w){
   var embed = 'https://vk.com/video_ext.php?oid='+w.video_owner_id+'&id='+w.video_id+'&hd=2';
+  var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
+  var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
+
+  var voteBlock = '';
+  if(cfg && cfg.votingOpen){
+    if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
+    else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
+    else if(!admitted) voteBlock = '<div class="note">Чтобы голосовать, подтвердите подписки на первом экране.</div>';
+    else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
+  } else {
+    voteBlock = '<div class="note">Голосование ещё не открыто.</div>';
+  }
+
   $('work-body').innerHTML =
     '<iframe class="player" src="'+esc(embed)+'" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>'+
     '<h2>'+esc(w.title)+'</h2>'+
-    '<p class="sub">'+esc(w.nomination_title)+'</p>'+
+    '<p class="sub">'+esc(w.nomination_title)+' · голосов: '+(w.votes||0)+'</p>'+
     (w.description ? '<p>'+esc(w.description)+'</p>' : '')+
+    voteBlock+
+    '<div id="vote-msg"></div>'+
     '<a class="btn btn-sec" href="'+esc(w.video_url)+'" target="_blank" rel="noopener">Открыть видео во ВКонтакте</a>';
+
+  var vb = $('do-vote');
+  if(vb) vb.onclick = function(){ castVote(w, vb) };
   showView('work');
+}
+
+async function castVote(w, btn){
+  btn.disabled = true; btn.textContent = 'Отправляем…';
+  try{
+    var r = await fetch(BACKEND+'/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ workId: w.id, vkUserId: uid, sid: sid })});
+    var res = await r.json();
+    if(res.ok){
+      myVotes.push({ work_id: w.id, nomination_id: w.nomination_id });
+      w.votes = (w.votes||0) + 1;
+      openWork(w);                      // перерисовываем карточку с учтённым голосом
+      page = 1; $('works').innerHTML=''; loadWorks();
+    } else {
+      btn.disabled = false; btn.textContent = 'Голосовать за эту работу';
+      $('vote-msg').innerHTML = '<div class="err">'+esc(res.error || 'Не удалось отдать голос')+'</div>';
+    }
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Голосовать за эту работу';
+    $('vote-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>';
+  }
 }
 
 /* ---------- подача работы ---------- */
