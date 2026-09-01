@@ -13,7 +13,8 @@
   h1 { font-size:18px; margin:0 0 4px }
   p.sub { color:var(--muted); margin:0 0 16px }
   .group-title { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:18px 0 8px }
-  .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px }
+  .check { display:flex; align-items:center; gap:12px; padding:14px; background:var(--card); border-radius:12px; margin-bottom:10px; text-decoration:none; color:inherit }
+  a.check:active { opacity:.7 }
   .icon { width:26px; height:26px; border-radius:50%; flex:0 0 26px; display:flex; align-items:center; justify-content:center; font-size:15px; background:var(--line); color:var(--muted) }
   .icon.ok { background:var(--ok); color:#fff }
   .icon.bad { background:var(--bad); color:#fff }
@@ -22,15 +23,16 @@
   .label { flex:1 }
   .label b { display:block }
   .label span { color:var(--muted); font-size:13px }
+  .arrow { color:var(--accent); font-size:20px }
   .soon { opacity:.5 }
   .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:14px }
   #log { margin-top:14px; font-size:11px; color:var(--muted); white-space:pre-wrap; word-break:break-word; opacity:.7 }
-  button { width:100%; padding:12px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:15px; margin-top:8px }
+  #done { display:none; text-align:center; padding:16px; background:var(--ok); color:#fff; border-radius:12px; font-weight:600; margin-top:14px }
 </style>
 </head>
 <body>
 <h1>Цех историй</h1>
-<p class="sub">Проверяем ваши подписки для участия в голосовании.</p>
+<p class="sub">Подтвердите подписки, чтобы участвовать в голосовании.</p>
 
 <div class="group-title">Обязательно для участия</div>
 
@@ -38,13 +40,14 @@
   <div class="icon pend">…</div>
   <div class="label"><b>Сообщество СоюзМаш</b><span>ВКонтакте</span></div>
 </div>
-<div class="check soon" id="c-max">
+<a class="check" id="c-max" target="_blank" rel="noopener">
   <div class="icon">·</div>
-  <div class="label"><b>Канал в MAX</b><span>скоро — по ссылке</span></div>
-</div>
+  <div class="label"><b>Канал в MAX</b><span>загрузка…</span></div>
+  <div class="arrow" id="max-arrow" style="display:none">→</div>
+</a>
 <div class="check soon" id="c-tg">
   <div class="icon">·</div>
-  <div class="label"><b>Канал в Telegram</b><span>скоро — по ссылке</span></div>
+  <div class="label"><b>Канал в Telegram</b><span>скоро</span></div>
 </div>
 
 <div class="group-title">Проверяется отдельно</div>
@@ -56,75 +59,70 @@
 
 <div class="note" id="gutenev-note" style="display:none">
   Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
-  сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем, даже если
-  сейчас отметка ещё не появилась.
+  сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
 </div>
 
-<button id="retry" style="display:none">Повторить проверку</button>
+<div id="done">✓ Все условия выполнены — вы участвуете!</div>
 <div id="log"></div>
 
 <script>
-var GUTENEV = 708816212;
-var SOYUZMASH = 57715265;
-var APP_ID = 54748142;
-var API_V = '5.199';
+var GUTENEV = 708816212, SOYUZMASH = 57715265, APP_ID = 54748142, API_V = '5.199';
+var BACKEND = 'https://ef-server.tailfacff5.ts.net';   // временный публичный адрес (Tailscale Funnel)
 
 var bridge = window.vkBridge;
+var sid = null, pollTimer = null;
+var state = { soyuzmash:false, max:false, tg:false };
 function log(m){ var el=document.getElementById('log'); el.textContent += m + '\n'; }
-function setIcon(id, state, note){
-  var c=document.getElementById(id); var i=c.querySelector('.icon');
-  i.className='icon '+state;
-  i.textContent = state==='ok'?'✓':state==='bad'?'✗':state==='wait'?'⏳':'…';
-  if(note){ c.querySelector('span').textContent = note; }
-}
+function setIcon(id, s, note){ var c=document.getElementById(id), i=c.querySelector('.icon');
+  i.className='icon '+s; i.textContent = s==='ok'?'✓':s==='bad'?'✗':s==='wait'?'⏳':'…'; if(note) c.querySelector('span').textContent=note; }
+function checkDone(){ if(state.soyuzmash && state.max){ document.getElementById('done').style.display='block'; } }
 
 async function run(){
-  document.getElementById('retry').style.display='none';
   setIcon('c-soyuzmash','pend'); setIcon('c-gutenev','pend');
   try{
     await bridge.send('VKWebAppInit', {});
     var info = await bridge.send('VKWebAppGetUserInfo', {});
-    var uid = info.id;
-    log('пользователь id=' + uid);
-
+    var uid = info.id; log('id='+uid);
     var tok = await bridge.send('VKWebAppGetAuthToken', { app_id: APP_ID, scope: 'friends,groups' });
     var access = tok.access_token;
-    log('токен получен, scope: ' + (tok.scope||''));
 
-    // Обязательное: членство в сообществе СоюзМаш — мгновенно и надёжно
-    try{
-      var mem = await bridge.send('VKWebAppCallAPIMethod', {
-        method:'groups.isMember', params:{ group_id:SOYUZMASH, user_id:uid, access_token:access, v:API_V }
-      });
-      var m = mem.response === 1 || mem.response === true;
-      setIcon('c-soyuzmash', m?'ok':'bad', m?'вы участник':'не участник — подпишитесь');
-    }catch(e){ setIcon('c-soyuzmash','bad','ошибка проверки'); log('isMember: '+JSON.stringify(e)); }
+    // ВК: сообщество (обязательно)
+    var soyuz=false;
+    try{ var mem = await bridge.send('VKWebAppCallAPIMethod',{method:'groups.isMember',params:{group_id:SOYUZMASH,user_id:uid,access_token:access,v:API_V}});
+      soyuz = mem.response===1||mem.response===true; state.soyuzmash=soyuz;
+      setIcon('c-soyuzmash', soyuz?'ok':'bad', soyuz?'вы участник':'не участник — подпишитесь'); }
+    catch(e){ setIcon('c-soyuzmash','bad','ошибка'); }
 
-    // Отдельно: подписка на личную страницу — мягкая, с пост-проверкой
-    try{
-      var subs = await bridge.send('VKWebAppCallAPIMethod', {
-        method:'users.getSubscriptions', params:{ user_id:uid, count:200, access_token:access, v:API_V }
-      });
-      var users = (subs.response && subs.response.users && subs.response.users.items) || [];
-      var g = users.indexOf(GUTENEV) >= 0;
-      if (g) {
-        setIcon('c-gutenev','ok','подписаны');
-        document.getElementById('gutenev-note').style.display='none';
-      } else {
-        setIcon('c-gutenev','wait','сверим при подведении итогов');
-        document.getElementById('gutenev-note').style.display='block';
-      }
-    }catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; log('getSubscriptions: '+JSON.stringify(e)); }
+    // ВК: личная страница (мягко)
+    var gut=false;
+    try{ var subs = await bridge.send('VKWebAppCallAPIMethod',{method:'users.getSubscriptions',params:{user_id:uid,count:200,access_token:access,v:API_V}});
+      var users=(subs.response&&subs.response.users&&subs.response.users.items)||[]; gut=users.indexOf(GUTENEV)>=0;
+      if(gut){ setIcon('c-gutenev','ok','подписаны'); } else { setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; } }
+    catch(e){ setIcon('c-gutenev','wait','сверим при подведении итогов'); document.getElementById('gutenev-note').style.display='block'; }
 
-  }catch(e){
-    log('ОШИБКА: ' + JSON.stringify(e));
-    document.getElementById('retry').style.display='block';
-  }
+    // Бэкенд: создать сессию, получить ссылки
+    var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({vkUserId:uid, vkGutenev:gut, vkSoyuzmash:soyuz})});
+    var sess = await r.json(); sid = sess.sid;
+    if(sess.maxUrl){ var a=document.getElementById('c-max'); a.href=sess.maxUrl;
+      a.querySelector('span').textContent='нажмите, чтобы подписаться';
+      document.getElementById('max-arrow').style.display='block'; }
+    poll();
+  }catch(e){ log('ОШИБКА: '+JSON.stringify(e)); }
 }
 
-document.getElementById('retry').onclick = run;
+async function poll(){
+  if(!sid) return;
+  try{ var s = await (await fetch(BACKEND+'/api/status?sid='+sid)).json();
+    if(s.max && !state.max){ state.max=true; setIcon('c-max','ok','подписка подтверждена'); document.getElementById('max-arrow').style.display='none'; }
+    if(s.tg && !state.tg){ state.tg=true; setIcon('c-tg','ok','подтверждено'); }
+    checkDone();
+  }catch(e){}
+  pollTimer = setTimeout(poll, 4000);
+}
+
 if (bridge) { run(); }
-else { log('VK Bridge не загрузился. Откройте страницу как мини-приложение внутри ВКонтакте.'); }
+else { log('Откройте страницу как мини-приложение внутри ВКонтакте.'); }
 </script>
 </body>
 </html>
