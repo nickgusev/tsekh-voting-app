@@ -52,6 +52,7 @@
   .btn-sec { background:var(--card); color:var(--fg); border:1px solid var(--line) }
   .back { background:none; border:0; color:var(--accent); font-size:15px; padding:0 0 12px; width:auto; margin:0; text-align:left; font-weight:400 }
 
+  #cat-search { margin-bottom:12px }
   .chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:10px; margin-bottom:6px; -webkit-overflow-scrolling:touch }
   .chip { flex:0 0 auto; padding:8px 14px; border-radius:999px; background:var(--card); border:1px solid var(--line);
     font-size:13px; white-space:nowrap; cursor:pointer }
@@ -90,6 +91,7 @@
 <div id="v-checks">
   <h1>Цех историй <span class="badge" id="plat"></span></h1>
   <p class="sub">Загрузка…</p>
+  <div class="err hide" id="gate-msg">Не все условия участия выполнены — подтвердите подписки ниже, чтобы голосовать.</div>
   <div id="checks"></div>
   <div class="note hide" id="vk-note">
     Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
@@ -104,6 +106,7 @@
   <button class="back" data-to="checks">← Назад</button>
   <h1>Работы конкурса</h1>
   <p class="sub" id="cat-count">Загрузка…</p>
+  <input type="text" id="cat-search" placeholder="Поиск по названию и описанию" autocomplete="off">
   <div class="chips" id="chips"></div>
   <div id="works"></div>
   <button id="more" class="btn-sec hide">Показать ещё</button>
@@ -205,7 +208,7 @@ var P = (function(){
 
 var uid = null, sid = null, voterId = null;
 var cfg = null, confirmed = {}, myVotes = [], admitted = false;
-var noms = [], curNom = '', page = 1, loading = false;
+var noms = [], curNom = '', curQ = '', page = 1, loading = false, searchTimer = null;
 var links = { maxUrl:null, tgUrl:null };
 
 var $ = function(id){ return document.getElementById(id) };
@@ -372,6 +375,7 @@ async function loadMyVotes(){
   try{
     var r = await (await fetch(BACKEND+'/api/my-votes?voterId='+voterId+CQ)).json();
     myVotes = r.votes || []; admitted = !!r.admitted;
+    if(admitted) show($('gate-msg'), false);
   }catch(e){}
 }
 
@@ -409,12 +413,13 @@ function renderChips(){
 async function loadWorks(){
   if(loading) return; loading = true;
   try{
-    var url = BACKEND+'/api/works?page='+page+(curNom?'&nomination='+encodeURIComponent(curNom):'')+CQ;
+    var url = BACKEND+'/api/works?page='+page+(curNom?'&nomination='+encodeURIComponent(curNom):'')+
+      (curQ?'&q='+encodeURIComponent(curQ):'')+CQ;
     var r = await (await fetch(url)).json();
     var rows = r.rows || [];
     $('cat-count').textContent = r.total ? ('Всего работ: '+r.total) : '';
     if(page===1 && !rows.length){
-      $('works').innerHTML = '<div class="empty">В этой номинации пока нет работ</div>';
+      $('works').innerHTML = '<div class="empty">'+(curQ ? 'Ничего не найдено' : 'В этой номинации пока нет работ')+'</div>';
     } else {
       rows.forEach(function(w){
         var d = document.createElement('div');
@@ -430,16 +435,31 @@ async function loadWorks(){
   loading = false;
 }
 $('more').onclick = function(){ page++; loadWorks() };
+// Дебаунс — иначе каждая буква бьёт по серверу отдельным запросом.
+$('cat-search').oninput = function(){
+  var v = this.value;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function(){ curQ = v.trim(); page = 1; $('works').innerHTML=''; loadWorks() }, 350);
+};
 
 function openWork(w){
+  // Голосование открыто, но условия участия не выполнены — не пускаем
+  // даже посмотреть карточку работы с кнопкой, а сразу возвращаем на экран
+  // проверок с объяснением, а не прячем кнопку молча внутри карточки.
+  if(cfg && cfg.votingOpen && !admitted){
+    showView('checks');
+    show($('gate-msg'), true);
+    window.scrollTo(0,0);
+    return;
+  }
   var embed = 'https://vk.com/video_ext.php?oid='+w.video_owner_id+'&id='+w.video_id+'&hd=2';
   var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
   var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
   var voteBlock;
+  // Сюда попадаем только когда admitted — иначе openWork() развернул бы раньше.
   if(cfg && cfg.votingOpen){
     if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
     else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
-    else if(!admitted) voteBlock = '<div class="note">Чтобы голосовать, подтвердите подписки на первом экране.</div>';
     else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
   } else voteBlock = '<div class="note">Голосование ещё не открыто.</div>';
 
