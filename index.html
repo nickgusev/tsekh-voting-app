@@ -58,12 +58,19 @@
     font-size:13px; white-space:nowrap; cursor:pointer }
   .chip.on { background:var(--accent); color:#fff; border-color:var(--accent) }
 
-  .work { display:flex; gap:12px; padding:12px; background:var(--card); border-radius:12px; margin-bottom:10px; cursor:pointer }
+  .work { display:flex; align-items:center; gap:12px; padding:12px; background:var(--card); border-radius:12px; margin-bottom:10px; cursor:pointer }
   .work .thumb { width:64px; height:64px; flex:0 0 64px; border-radius:9px; background:var(--line);
     display:flex; align-items:center; justify-content:center; font-size:22px; color:var(--muted) }
   .work .meta { flex:1; min-width:0 }
   .work .meta b { display:block; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
   .work .meta span { color:var(--muted); font-size:13px }
+  /* Кнопка сбоку — голосовать не открывая карточку. width:auto перебивает
+     общий button{width:100%}, иначе она растянулась бы на всю строку. */
+  .vote-side { flex:0 0 auto; width:auto; padding:9px 14px; margin:0; font-size:13px; white-space:nowrap }
+  .vote-badge { flex:0 0 auto; width:30px; height:30px; border-radius:50%; display:flex;
+    align-items:center; justify-content:center; font-size:15px; font-weight:700 }
+  .vote-badge.ok { background:var(--ok); color:#fff }
+  .vote-badge.off { color:var(--hint); font-size:12px; text-align:center; width:44px }
 
   .nom-row { display:flex; align-items:center; gap:10px; margin:9px 0; font-size:14px }
   .nom-row .n { flex:1 } .nom-row .c { color:var(--muted); font-size:13px; white-space:nowrap }
@@ -424,9 +431,22 @@ async function loadWorks(){
       rows.forEach(function(w){
         var d = document.createElement('div');
         d.className = 'work';
+        // Кнопка сбоку — голос без открытия карточки. Голосов уже отданных
+        // за эту работу или занятых в номинации показываем значком, а не
+        // кнопкой, чтобы не провоцировать повторную отправку.
+        var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
+        var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
+        var side = '';
+        if(cfg && cfg.votingOpen){
+          if(votedThis) side = '<div class="vote-badge ok" title="Ваш голос учтён">✓</div>';
+          else if(votedNom) side = '<div class="vote-badge off">голос отдан</div>';
+          else side = '<button type="button" class="vote-side btn-sec">Голосовать</button>';
+        }
         d.innerHTML = '<div class="thumb">▶</div><div class="meta"><b>'+esc(w.title)+'</b>'+
-          '<span>'+esc(w.nomination_title)+' · голосов: '+(w.votes||0)+'</span></div>';
+          '<span>'+esc(w.nomination_title)+' · голосов: <span class="vcount">'+(w.votes||0)+'</span></span></div>'+side;
         d.onclick = function(){ openWork(w) };
+        var vb = d.querySelector('.vote-side');
+        if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, d) };
         $('works').appendChild(d);
       });
     }
@@ -492,6 +512,36 @@ async function castVote(w, btn){
   }catch(e){
     btn.disabled = false; btn.textContent = 'Голосовать за эту работу';
     $('vote-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>';
+  }
+}
+
+/** Тот же голос, но с кнопки в списке — без перехода в карточку работы.
+ *  Ошибку показываем прямо на кнопке (своего места под сообщение в строке
+ *  списка нет), через 2 секунды текст возвращается обратно. */
+async function voteFromList(w, btn, rowEl){
+  if(cfg && cfg.votingOpen && !admitted){
+    showView('checks'); show($('gate-msg'), true); window.scrollTo(0,0); return;
+  }
+  var was = btn.textContent;
+  btn.disabled = true; btn.textContent = '…';
+  try{
+    var res = await (await fetch(BACKEND+'/api/vote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ workId: w.id, voterId: voterId, sid: sid })})).json();
+    if(res.ok){
+      myVotes.push({ work_id: w.id, nomination_id: w.nomination_id });
+      w.votes = (w.votes||0) + 1;
+      var vc = rowEl.querySelector('.vcount'); if(vc) vc.textContent = w.votes;
+      btn.outerHTML = '<div class="vote-badge ok" title="Ваш голос учтён">✓</div>';
+    } else {
+      // Полный текст ошибки сервера сюда не помещается — узкая кнопка в
+      // строке списка, а не карточка. Подробности при желании увидят
+      // открыв работу целиком.
+      btn.disabled = false; btn.textContent = 'Не удалось';
+      setTimeout(function(){ btn.disabled = false; btn.textContent = was }, 2000);
+    }
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Нет связи';
+    setTimeout(function(){ btn.disabled = false; btn.textContent = was }, 2000);
   }
 }
 
