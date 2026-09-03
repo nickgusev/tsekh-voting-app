@@ -396,7 +396,14 @@ function renderChips(){
   });
   $('chips').innerHTML = html;
   Array.prototype.forEach.call($('chips').querySelectorAll('.chip'), function(c){
-    c.onclick = function(){ curNom = c.dataset.n; page = 1; $('works').innerHTML=''; loadWorks() };
+    c.onclick = function(){
+      curNom = c.dataset.n; page = 1; $('works').innerHTML='';
+      // Полный renderChips() тут не нужен и сбросил бы прокрутку чипов —
+      // просто переносим подсветку на нажатый.
+      Array.prototype.forEach.call($('chips').querySelectorAll('.chip'), function(x){ x.classList.remove('on') });
+      c.classList.add('on');
+      loadWorks();
+    };
   });
 }
 async function loadWorks(){
