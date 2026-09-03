@@ -135,6 +135,13 @@
 <script>
 var API_V = '5.199';
 var BACKEND = 'https://ef-server.tailfacff5.ts.net';
+// Конкурс передаётся явно ?contest=N — без этого сервер каждый запрос
+// разрешает самостоятельно как «первый по списку», и разные запросы
+// (конфиг, работы, голос) могли бы молча разъехаться по разным конкурсам.
+var CONTEST = new URLSearchParams(location.search).get('contest') || '';
+// К адресу подмешивается &contest=N, если он задан; без него — пустая строка.
+var CQ = CONTEST ? '&contest=' + encodeURIComponent(CONTEST) : '';
+var CQ1 = CONTEST ? '?contest=' + encodeURIComponent(CONTEST) : '';
 
 /* ================== адаптер площадки ==================
    Одно приложение на три сети. Различия спрятаны здесь,
@@ -324,7 +331,7 @@ async function checkVkChannels(){
 
 async function run(){
   try{
-    cfg = await (await fetch(BACKEND+'/api/config')).json();
+    cfg = await (await fetch(BACKEND+'/api/config'+CQ1)).json();
     document.title = cfg.title;
     $('v-checks').querySelector('h1').firstChild.textContent = cfg.title + ' ';
     $('plat').textContent = P.title;
@@ -339,6 +346,7 @@ async function run(){
 
     var payload = { platform: P.name, vkChannels: vkPassed };
     if(P.name==='vk') payload.vkUserId = uid; else payload.extUserId = uid;
+    if(CONTEST) payload.contestId = CONTEST;
     var r = await fetch(BACKEND+'/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)});
     var sess = await r.json();
@@ -362,7 +370,7 @@ function applyStatus(s){
 async function loadMyVotes(){
   if(!voterId) return;
   try{
-    var r = await (await fetch(BACKEND+'/api/my-votes?voterId='+voterId)).json();
+    var r = await (await fetch(BACKEND+'/api/my-votes?voterId='+voterId+CQ)).json();
     myVotes = r.votes || []; admitted = !!r.admitted;
   }catch(e){}
 }
@@ -379,7 +387,7 @@ async function poll(){
 
 /* ---------- каталог ---------- */
 async function loadNominations(){
-  try{ noms = (await (await fetch(BACKEND+'/api/nominations')).json()).nominations || [] }catch(e){ noms = [] }
+  try{ noms = (await (await fetch(BACKEND+'/api/nominations'+CQ1)).json()).nominations || [] }catch(e){ noms = [] }
 }
 function renderChips(){
   var html = '<div class="chip'+(curNom===''?' on':'')+'" data-n="">Все</div>';
@@ -394,7 +402,7 @@ function renderChips(){
 async function loadWorks(){
   if(loading) return; loading = true;
   try{
-    var url = BACKEND+'/api/works?page='+page+(curNom?'&nomination='+encodeURIComponent(curNom):'');
+    var url = BACKEND+'/api/works?page='+page+(curNom?'&nomination='+encodeURIComponent(curNom):'')+CQ;
     var r = await (await fetch(url)).json();
     var rows = r.rows || [];
     $('cat-count').textContent = r.total ? ('Всего работ: '+r.total) : '';
@@ -481,7 +489,8 @@ $('do-submit').onclick = async function(){
   try{
     var res = await (await fetch(BACKEND+'/api/works', {method:'POST',headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ vkUserId: uid, nominationId: $('f-nom').value, title: $('f-title').value,
-                             videoUrl: $('f-url').value, description: $('f-desc').value })})).json();
+                             videoUrl: $('f-url').value, description: $('f-desc').value,
+                             contestId: CONTEST || undefined })})).json();
     if(res.ok){
       $('submit-msg').innerHTML = '<div class="okmsg">Работа отправлена'+
         (res.moderated ? ' и появится в каталоге после проверки организаторами' : '')+
