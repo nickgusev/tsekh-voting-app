@@ -67,10 +67,12 @@
   /* Кнопка сбоку — голосовать не открывая карточку. width:auto перебивает
      общий button{width:100%}, иначе она растянулась бы на всю строку. */
   .vote-side { flex:0 0 auto; width:auto; padding:9px 14px; margin:0; font-size:13px; white-space:nowrap }
-  .vote-badge { flex:0 0 auto; width:30px; height:30px; border-radius:50%; display:flex;
-    align-items:center; justify-content:center; font-size:15px; font-weight:700;
-    padding:0; margin:0; border:0 }
-  .vote-badge.ok { background:var(--ok); color:#fff; cursor:pointer }
+  .vote-badge { flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:600; padding:0; margin:0; border:0 }
+  /* Раньше был кружок с одной галочкой без подписи — на тач-экране не видно
+     подсказки при наведении, поэтому явная надпись «Отменить», а не значок. */
+  .vote-badge.ok { background:var(--ok); color:#fff; cursor:pointer; width:auto; height:auto;
+    border-radius:999px; padding:8px 13px; white-space:nowrap }
   .vote-badge.ok:active { opacity:.8 }
   /* .off — не кружок, а поясняющая надпись («голос отдан», «лимит голосов»);
      ширина фиксированной 44px не хватало, текст переносился на две строки
@@ -482,7 +484,11 @@ function wireVoteSide(d, w){
   // если он исчерпан, показывать активную кнопку в других номинациях нельзя,
   // сервер их всё равно отклонит.
   var totalReached = !!(cfg.votesPerUserTotal && myVotes.length >= cfg.votesPerUserTotal);
-  var side = votedThis ? '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>'
+  // Раньше тут была галочка-кружок без подписи — на телефоне/в Telegram
+  // нет наведения курсора, title-подсказка не показывается, и было не
+  // понять, что по значку вообще можно нажать. Текстовая кнопка не требует
+  // объяснений.
+  var side = votedThis ? '<button type="button" class="vote-badge ok">✓ Отменить</button>'
     : votedNom ? '<div class="vote-badge off">голос отдан</div>'
     : totalReached ? '<div class="vote-badge off">лимит голосов</div>'
     : '<button type="button" class="vote-side btn-sec">Голосовать</button>';
