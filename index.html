@@ -68,9 +68,11 @@
      общий button{width:100%}, иначе она растянулась бы на всю строку. */
   .vote-side { flex:0 0 auto; width:auto; padding:9px 14px; margin:0; font-size:13px; white-space:nowrap }
   .vote-badge { flex:0 0 auto; width:30px; height:30px; border-radius:50%; display:flex;
-    align-items:center; justify-content:center; font-size:15px; font-weight:700 }
-  .vote-badge.ok { background:var(--ok); color:#fff }
-  .vote-badge.off { color:var(--hint); font-size:12px; text-align:center; width:44px }
+    align-items:center; justify-content:center; font-size:15px; font-weight:700;
+    padding:0; margin:0; border:0 }
+  .vote-badge.ok { background:var(--ok); color:#fff; cursor:pointer }
+  .vote-badge.ok:active { opacity:.8 }
+  .vote-badge.off { color:var(--hint); font-size:12px; text-align:center; width:44px; background:none }
 
   .nom-row { display:flex; align-items:center; gap:10px; margin:9px 0; font-size:14px }
   .nom-row .n { flex:1 } .nom-row .c { color:var(--muted); font-size:13px; white-space:nowrap }
@@ -107,7 +109,7 @@
     Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
     сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
   </div>
-  <button id="to-catalog" class="btn-sec">Смотреть работы</button>
+  <button id="to-catalog" class="btn-sec">Перейти к голосованию</button>
   <button id="to-submit" class="hide">Подать свою работу</button>
   <div id="log"></div>
 </div>
@@ -510,7 +512,7 @@ async function loadWorks(){
         var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
         var side = '';
         if(cfg && cfg.votingOpen){
-          if(votedThis) side = '<div class="vote-badge ok" title="Ваш голос учтён">✓</div>';
+          if(votedThis) side = '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>';
           else if(votedNom) side = '<div class="vote-badge off">голос отдан</div>';
           else side = '<button type="button" class="vote-side btn-sec">Голосовать</button>';
         }
@@ -519,6 +521,8 @@ async function loadWorks(){
         d.onclick = function(){ openWork(w) };
         var vb = d.querySelector('.vote-side');
         if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, d) };
+        var vbadge = d.querySelector('.vote-badge.ok');
+        if(vbadge) vbadge.onclick = function(e){ e.stopPropagation(); unvoteFromList(w, vbadge, d) };
         $('works').appendChild(d);
       });
     }
@@ -547,7 +551,7 @@ function openWork(w){
   var voteBlock;
   // Сюда попадаем только когда голосование открыто и admitted — иначе
   // voteBlockedReason() развернул бы раньше.
-  if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
+  if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div><button id="do-unvote" class="btn-sec">Отменить голос</button>';
   else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
   else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
 
@@ -560,6 +564,8 @@ function openWork(w){
     '<a class="btn btn-sec" href="'+esc(w.video_url)+'" target="_blank" rel="noopener">Открыть видео во ВКонтакте</a>';
   var vb = $('do-vote');
   if(vb) vb.onclick = function(){ castVote(w, vb) };
+  var uvb = $('do-unvote');
+  if(uvb) uvb.onclick = function(){ castUnvote(w, uvb) };
   showView('work');
 }
 
@@ -583,6 +589,26 @@ async function castVote(w, btn){
   }
 }
 
+async function castUnvote(w, btn){
+  btn.disabled = true; btn.textContent = 'Отменяем…';
+  try{
+    var res = await (await fetch(BACKEND+'/api/unvote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ workId: w.id, voterId: voterId })})).json();
+    if(res.ok){
+      myVotes = myVotes.filter(function(v){ return v.work_id !== w.id });
+      w.votes = Math.max(0, (w.votes||0) - 1);
+      openWork(w);
+      page = 1; $('works').innerHTML=''; loadWorks();
+    } else {
+      btn.disabled = false; btn.textContent = 'Отменить голос';
+      $('vote-msg').innerHTML = '<div class="err">'+esc(res.error || 'Не удалось отменить голос')+'</div>';
+    }
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Отменить голос';
+    $('vote-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>';
+  }
+}
+
 /** Тот же голос, но с кнопки в списке — без перехода в карточку работы.
  *  Ошибку показываем прямо на кнопке (своего места под сообщение в строке
  *  списка нет), через 2 секунды текст возвращается обратно. */
@@ -598,7 +624,9 @@ async function voteFromList(w, btn, rowEl){
       myVotes.push({ work_id: w.id, nomination_id: w.nomination_id });
       w.votes = (w.votes||0) + 1;
       var vc = rowEl.querySelector('.vcount'); if(vc) vc.textContent = w.votes;
-      btn.outerHTML = '<div class="vote-badge ok" title="Ваш голос учтён">✓</div>';
+      btn.outerHTML = '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>';
+      var vbadge = rowEl.querySelector('.vote-badge.ok');
+      if(vbadge) vbadge.onclick = function(e){ e.stopPropagation(); unvoteFromList(w, vbadge, rowEl) };
     } else {
       // Полный текст ошибки сервера сюда не помещается — узкая кнопка в
       // строке списка, а не карточка. Подробности при желании увидят
@@ -609,6 +637,28 @@ async function voteFromList(w, btn, rowEl){
   }catch(e){
     btn.disabled = false; btn.textContent = 'Нет связи';
     setTimeout(function(){ btn.disabled = false; btn.textContent = was }, 2000);
+  }
+}
+
+/** Отмена голоса прямо из списка — зеркало voteFromList(). Кнопку возвращаем
+ *  в исходное состояние «Голосовать»: место в номинации освободилось. */
+async function unvoteFromList(w, btn, rowEl){
+  btn.disabled = true;
+  try{
+    var res = await (await fetch(BACKEND+'/api/unvote',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ workId: w.id, voterId: voterId })})).json();
+    if(res.ok){
+      myVotes = myVotes.filter(function(v){ return v.work_id !== w.id });
+      w.votes = Math.max(0, (w.votes||0) - 1);
+      var vc = rowEl.querySelector('.vcount'); if(vc) vc.textContent = w.votes;
+      btn.outerHTML = '<button type="button" class="vote-side btn-sec">Голосовать</button>';
+      var vb = rowEl.querySelector('.vote-side');
+      if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, rowEl) };
+    } else {
+      btn.disabled = false;
+    }
+  }catch(e){
+    btn.disabled = false;
   }
 }
 
