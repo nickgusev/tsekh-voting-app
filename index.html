@@ -78,12 +78,6 @@
   .vote-badge.off { color:var(--hint); font-size:11.5px; line-height:1.25; text-align:right;
     width:auto; height:auto; border-radius:0; white-space:nowrap; background:none }
 
-  .nom-row { display:flex; align-items:center; gap:10px; margin:9px 0; font-size:14px }
-  .nom-row .n { flex:1 } .nom-row .c { color:var(--muted); font-size:13px; white-space:nowrap }
-  .bar { height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin-top:4px }
-  .bar i { display:block; height:100%; background:var(--accent) }
-  .bar.full i { background:var(--ok) }
-
   label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px }
   input[type=text], textarea, select { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px;
     background:var(--bg); color:var(--fg); font-size:15px; font-family:inherit }
@@ -114,7 +108,6 @@
     сверяем ещё раз при подведении итогов. Если вы подписаны — засчитаем.
   </div>
   <button id="to-catalog" class="btn-sec">Перейти к голосованию</button>
-  <button id="to-submit" class="hide">Подать свою работу</button>
   <div id="log"></div>
 </div>
 
@@ -131,24 +124,6 @@
 <div id="v-work" class="hide">
   <button class="back" data-to="catalog">← К списку</button>
   <div id="work-body"></div>
-</div>
-
-<div id="v-submit" class="hide">
-  <button class="back" data-to="checks">← Назад</button>
-  <h1>Подать работу</h1>
-  <p class="sub">Видео должно быть загружено во ВКонтакте — укажите ссылку на него.</p>
-  <div class="group-title">Свободные места</div>
-  <div id="nom-progress"></div>
-  <label for="f-nom">Номинация</label>
-  <select id="f-nom"></select>
-  <label for="f-title">Название работы</label>
-  <input type="text" id="f-title" maxlength="200" placeholder="Например: Первый день на заводе">
-  <label for="f-url">Ссылка на видео ВКонтакте</label>
-  <input type="text" id="f-url" placeholder="https://vk.com/video-123456_789012">
-  <label for="f-desc">Описание (необязательно)</label>
-  <textarea id="f-desc" maxlength="2000" placeholder="Пара слов о вашей истории"></textarea>
-  <button id="do-submit">Отправить работу</button>
-  <div id="submit-msg"></div>
 </div>
 
 <script>
@@ -233,7 +208,7 @@ function show(el, yes){ el.classList.toggle('hide', !yes) }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c] }) }
 function showView(name){
-  ['checks','catalog','work','submit'].forEach(function(v){ show($('v-'+v), v===name) });
+  ['checks','catalog','work'].forEach(function(v){ show($('v-'+v), v===name) });
   window.scrollTo(0,0);
 }
 Array.prototype.forEach.call(document.querySelectorAll('.back'), function(b){
@@ -451,7 +426,6 @@ function applyStatus(s){
   if(!s) return;
   (s.confirmed||[]).forEach(function(id){ confirmed[id]=true });
   renderChecks(s.detail);
-  show($('to-submit'), !!s.completed && cfg.submissionOpen && P.name==='vk');
   if(s.completed && !admitted) loadMyVotes();
 }
 
@@ -684,52 +658,11 @@ async function unvoteFromList(w, btn, rowEl){
   }
 }
 
-/* ---------- подача работы ---------- */
-function renderSubmitForm(){
-  var prog = '', opts = '';
-  noms.forEach(function(n){
-    var pct = Math.round(100 * n.taken / n.max_works);
-    prog += '<div><div class="nom-row"><span class="n">'+esc(n.title)+'</span>'+
-      '<span class="c">'+n.taken+'/'+n.max_works+'</span></div>'+
-      '<div class="bar'+(n.full?' full':'')+'"><i style="width:'+pct+'%"></i></div></div>';
-    opts += '<option value="'+esc(n.id)+'"'+(n.full?' disabled':'')+'>'+esc(n.title)+
-      (n.full?' — мест нет':' — свободно '+n.free)+'</option>';
-  });
-  $('nom-progress').innerHTML = prog;
-  $('f-nom').innerHTML = opts;
-}
-
-$('do-submit').onclick = async function(){
-  var btn = this; $('submit-msg').innerHTML = '';
-  btn.disabled = true; btn.textContent = 'Отправляем…';
-  try{
-    var res = await (await fetch(BACKEND+'/api/works', {method:'POST',headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ vkUserId: uid, nominationId: $('f-nom').value, title: $('f-title').value,
-                             videoUrl: $('f-url').value, description: $('f-desc').value,
-                             contestId: CONTEST || undefined })})).json();
-    if(res.ok){
-      $('submit-msg').innerHTML = '<div class="okmsg">Работа отправлена'+
-        (res.moderated ? ' и появится в каталоге после проверки организаторами' : '')+
-        '. Занято мест: '+res.taken+' из '+res.max+'.</div>';
-      $('f-title').value=''; $('f-url').value=''; $('f-desc').value='';
-      await loadNominations(); renderSubmitForm();
-    } else {
-      $('submit-msg').innerHTML = '<div class="err">'+esc(res.error || 'Не удалось отправить работу')+'</div>';
-    }
-  }catch(e){ $('submit-msg').innerHTML = '<div class="err">Нет связи с сервером. Попробуйте ещё раз.</div>' }
-  btn.disabled = false; btn.textContent = 'Отправить работу';
-};
-
 $('to-catalog').onclick = async function(){
   showView('catalog');
   if(!noms.length) await loadNominations();
   renderChips();
   if(!$('works').children.length) loadWorks();
-};
-$('to-submit').onclick = async function(){
-  showView('submit');
-  if(!noms.length) await loadNominations();
-  renderSubmitForm();
 };
 
 run();
