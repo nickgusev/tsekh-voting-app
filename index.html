@@ -85,6 +85,8 @@
   .err { background:rgba(221,51,51,.12); color:var(--bad); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
   .okmsg { background:rgba(26,156,78,.12); color:var(--ok); padding:12px; border-radius:10px; margin-top:12px; font-size:14px }
   .note { font-size:12px; color:var(--muted); background:var(--card); border-radius:10px; padding:12px; margin-top:12px }
+  #countdown { font-size:15px; font-weight:600; color:var(--accent); text-align:center;
+    background:var(--card); border-radius:10px; padding:14px; margin:0 0 16px }
   .player { width:100%; aspect-ratio:16/9; border:0; border-radius:12px; background:#000; margin-bottom:12px }
   .empty { color:var(--muted); text-align:center; padding:28px 0; font-size:14px }
   .badge { display:inline-block; font-size:11px; color:var(--muted); border:1px solid var(--line);
@@ -98,7 +100,8 @@
 <div id="v-checks">
   <h1>Цех историй <span class="badge" id="plat"></span></h1>
   <p class="sub">Загрузка…</p>
-  <div class="err hide" id="gate-msg">Не все условия участия выполнены — подтвердите подписки ниже, чтобы голосовать.</div>
+  <div class="note hide" id="countdown"></div>
+  <div class="err hide" id="gate-msg"></div>
   <div id="checks"></div>
   <div class="note hide" id="vk-note">
     Подписку на личную страницу ВКонтакте отражает с задержкой, поэтому её мы
@@ -339,6 +342,74 @@ async function checkVkChannels(){
   return passed;
 }
 
+/* ---------- обратный отсчёт ---------- */
+var countdownTimer = null;
+function fmtDuration(ms){
+  var s = Math.max(0, Math.floor(ms / 1000));
+  var d = Math.floor(s / 86400); s -= d * 86400;
+  var h = Math.floor(s / 3600); s -= h * 3600;
+  var m = Math.floor(s / 60); s -= m * 60;
+  var parts = [];
+  if(d) parts.push(d + 'д');
+  if(d || h) parts.push(h + 'ч');
+  if(d || h || m) parts.push(m + 'м');
+  parts.push(s + 'с');
+  return parts.join(' ');
+}
+/** Отсчёт до ближайшего значимого момента — старта приёма работ или
+ *  голосования. Обе даты — организаторские, наступают не каждую секунду,
+ *  поэтому по истечении просто перезагружаем страницу, а не городим
+ *  частичное обновление состояния. */
+function renderCountdown(){
+  clearInterval(countdownTimer);
+  var el = $('countdown');
+  var target = null, label = '';
+  if(cfg && !cfg.submissionOpen && cfg.submissionNote === 'ещё не началось' && cfg.submissionStartsAt){
+    target = cfg.submissionStartsAt; label = 'До начала приёма работ: ';
+  } else if(cfg && !cfg.votingOpen && cfg.votingNote === 'ещё не началось' && cfg.votingStartsAt){
+    target = cfg.votingStartsAt; label = 'До начала голосования: ';
+  }
+  if(!target){ show(el, false); return; }
+  show(el, true);
+  function tick(){
+    var diff = target - Date.now();
+    el.textContent = label + fmtDuration(diff);
+    if(diff <= 0){ clearInterval(countdownTimer); location.reload(); }
+  }
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
+
+/* ---------- гейт на голосование ---------- */
+/** Почему нельзя голосовать прямо сейчас — если можно, вернёт null.
+ *  Проверяется в двух местах (карточка работы и кнопка в списке), поэтому
+ *  вынесено отдельно, а не продублировано. */
+function voteBlockedReason(){
+  if(!cfg) return 'closed';
+  if(!cfg.votingOpen) return 'closed';
+  if(!admitted) return 'not-admitted';
+  return null;
+}
+/** Возврат на экран проверок с объяснением — как при незавершённых
+ *  условиях участия, так и когда голосование ещё попросту не открылось:
+ *  человек не должен листать карточки работ в ожидании открытия, ничего
+ *  не понимая, а должен готовиться — подтверждать подписки. */
+function bounceToChecks(reason){
+  showView('checks');
+  var el = $('gate-msg');
+  if(reason === 'not-admitted'){
+    el.textContent = 'Не все условия участия выполнены — подтвердите подписки ниже, чтобы голосовать.';
+  } else if(cfg && cfg.votingNote === 'ещё не началось'){
+    el.textContent = 'Голосование ещё не началось — подтвердите подписки, чтобы быть готовым.';
+  } else if(cfg && cfg.votingNote === 'завершено'){
+    el.textContent = 'Голосование завершено.';
+  } else {
+    el.textContent = 'Голосование сейчас недоступно.';
+  }
+  show(el, true);
+  window.scrollTo(0, 0);
+}
+
 async function run(){
   try{
     cfg = await (await fetch(BACKEND+'/api/config'+CQ1)).json();
@@ -347,6 +418,7 @@ async function run(){
     $('plat').textContent = P.title;
     $('v-checks').querySelector('.sub').textContent = cfg.subtitle;
     renderChecks(null);
+    renderCountdown();
 
     await P.init();
     uid = await P.userId();
@@ -463,25 +535,21 @@ $('cat-search').oninput = function(){
 };
 
 function openWork(w){
-  // Голосование открыто, но условия участия не выполнены — не пускаем
-  // даже посмотреть карточку работы с кнопкой, а сразу возвращаем на экран
-  // проверок с объяснением, а не прячем кнопку молча внутри карточки.
-  if(cfg && cfg.votingOpen && !admitted){
-    showView('checks');
-    show($('gate-msg'), true);
-    window.scrollTo(0,0);
-    return;
-  }
+  // Не пускаем смотреть карточку работы, пока голосовать всё равно нельзя —
+  // ни при неподтверждённых условиях участия, ни пока голосование ещё не
+  // открылось (даже до старта конкурса). Ожидание должно вести к подтверждению
+  // подписок, а не к бесцельному листанию карточек.
+  var blocked = voteBlockedReason();
+  if(blocked){ bounceToChecks(blocked); return; }
   var embed = 'https://vk.com/video_ext.php?oid='+w.video_owner_id+'&id='+w.video_id+'&hd=2';
   var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
   var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
   var voteBlock;
-  // Сюда попадаем только когда admitted — иначе openWork() развернул бы раньше.
-  if(cfg && cfg.votingOpen){
-    if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
-    else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
-    else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
-  } else voteBlock = '<div class="note">Голосование ещё не открыто.</div>';
+  // Сюда попадаем только когда голосование открыто и admitted — иначе
+  // voteBlockedReason() развернул бы раньше.
+  if(votedThis) voteBlock = '<div class="okmsg">Ваш голос за эту работу учтён ✓</div>';
+  else if(votedNom) voteBlock = '<div class="note">В этой номинации вы уже отдали голос за другую работу.</div>';
+  else voteBlock = '<button id="do-vote">Голосовать за эту работу</button>';
 
   $('work-body').innerHTML =
     '<iframe class="player" src="'+esc(embed)+'" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>'+
@@ -519,9 +587,8 @@ async function castVote(w, btn){
  *  Ошибку показываем прямо на кнопке (своего места под сообщение в строке
  *  списка нет), через 2 секунды текст возвращается обратно. */
 async function voteFromList(w, btn, rowEl){
-  if(cfg && cfg.votingOpen && !admitted){
-    showView('checks'); show($('gate-msg'), true); window.scrollTo(0,0); return;
-  }
+  var blocked = voteBlockedReason();
+  if(blocked){ bounceToChecks(blocked); return; }
   var was = btn.textContent;
   btn.disabled = true; btn.textContent = '…';
   try{
