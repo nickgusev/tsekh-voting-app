@@ -491,6 +491,37 @@ function renderChips(){
     };
   });
 }
+/** Правая часть строки списка — кнопка/значок голосования. Вынесена отдельно,
+ *  чтобы её можно было перерисовать у уже отрисованной строки (см. ниже),
+ *  а не только один раз при первой загрузке списка. */
+function wireVoteSide(d, w){
+  var old = d.querySelector('.vote-side, .vote-badge');
+  if(old) old.remove();
+  if(!(cfg && cfg.votingOpen)) return;
+  var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
+  var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
+  // Лимит «всего голосов у человека» общий на весь конкурс, не на номинацию —
+  // если он исчерпан, показывать активную кнопку в других номинациях нельзя,
+  // сервер их всё равно отклонит.
+  var totalReached = !!(cfg.votesPerUserTotal && myVotes.length >= cfg.votesPerUserTotal);
+  var side = votedThis ? '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>'
+    : votedNom ? '<div class="vote-badge off">голос отдан</div>'
+    : totalReached ? '<div class="vote-badge off">лимит голосов</div>'
+    : '<button type="button" class="vote-side btn-sec">Голосовать</button>';
+  d.insertAdjacentHTML('beforeend', side);
+  var vb = d.querySelector('.vote-side');
+  if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, d) };
+  var vbadge = d.querySelector('.vote-badge.ok');
+  if(vbadge) vbadge.onclick = function(e){ e.stopPropagation(); unvoteFromList(w, vbadge, d) };
+}
+/** После голоса/отмены голоса состояние могло поменяться у всех видимых
+ *  строк, не только у той, что нажали: лимит на номинацию освобождает или
+ *  занимает соседей по номинации, а общий лимит на конкурс — вообще все. */
+function refreshAllSides(){
+  Array.prototype.forEach.call($('works').querySelectorAll('.work'), function(d){
+    if(d._work) wireVoteSide(d, d._work);
+  });
+}
 async function loadWorks(){
   if(loading) return; loading = true;
   try{
@@ -505,24 +536,11 @@ async function loadWorks(){
       rows.forEach(function(w){
         var d = document.createElement('div');
         d.className = 'work';
-        // Кнопка сбоку — голос без открытия карточки. Голосов уже отданных
-        // за эту работу или занятых в номинации показываем значком, а не
-        // кнопкой, чтобы не провоцировать повторную отправку.
-        var votedThis = myVotes.some(function(v){ return v.work_id===w.id });
-        var votedNom = myVotes.some(function(v){ return v.nomination_id===w.nomination_id });
-        var side = '';
-        if(cfg && cfg.votingOpen){
-          if(votedThis) side = '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>';
-          else if(votedNom) side = '<div class="vote-badge off">голос отдан</div>';
-          else side = '<button type="button" class="vote-side btn-sec">Голосовать</button>';
-        }
+        d._work = w;   // нужен позже, чтобы обновить строку без перезапроса — см. refreshAllSides()
         d.innerHTML = '<div class="thumb">▶</div><div class="meta"><b>'+esc(w.title)+'</b>'+
-          '<span>'+esc(w.nomination_title)+' · голосов: <span class="vcount">'+(w.votes||0)+'</span></span></div>'+side;
+          '<span>'+esc(w.nomination_title)+' · голосов: <span class="vcount">'+(w.votes||0)+'</span></span></div>';
         d.onclick = function(){ openWork(w) };
-        var vb = d.querySelector('.vote-side');
-        if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, d) };
-        var vbadge = d.querySelector('.vote-badge.ok');
-        if(vbadge) vbadge.onclick = function(e){ e.stopPropagation(); unvoteFromList(w, vbadge, d) };
+        wireVoteSide(d, w);
         $('works').appendChild(d);
       });
     }
@@ -624,9 +642,9 @@ async function voteFromList(w, btn, rowEl){
       myVotes.push({ work_id: w.id, nomination_id: w.nomination_id });
       w.votes = (w.votes||0) + 1;
       var vc = rowEl.querySelector('.vcount'); if(vc) vc.textContent = w.votes;
-      btn.outerHTML = '<button type="button" class="vote-badge ok" title="Отменить голос">✓</button>';
-      var vbadge = rowEl.querySelector('.vote-badge.ok');
-      if(vbadge) vbadge.onclick = function(e){ e.stopPropagation(); unvoteFromList(w, vbadge, rowEl) };
+      // Не только эта строка — у остальных работ той же номинации тоже
+      // изменилось состояние (свободна была → занята голосом).
+      refreshAllSides();
     } else {
       // Полный текст ошибки сервера сюда не помещается — узкая кнопка в
       // строке списка, а не карточка. Подробности при желании увидят
@@ -651,9 +669,9 @@ async function unvoteFromList(w, btn, rowEl){
       myVotes = myVotes.filter(function(v){ return v.work_id !== w.id });
       w.votes = Math.max(0, (w.votes||0) - 1);
       var vc = rowEl.querySelector('.vcount'); if(vc) vc.textContent = w.votes;
-      btn.outerHTML = '<button type="button" class="vote-side btn-sec">Голосовать</button>';
-      var vb = rowEl.querySelector('.vote-side');
-      if(vb) vb.onclick = function(e){ e.stopPropagation(); voteFromList(w, vb, rowEl) };
+      // Место в номинации освободилось — у соседних работ «голос отдан»
+      // должно смениться на кликабельное «Голосовать», не только у этой строки.
+      refreshAllSides();
     } else {
       btn.disabled = false;
     }
